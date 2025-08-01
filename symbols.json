@@ -1,39 +1,18 @@
 {
   "symbols": [
     {
-      "name": "BTCUSDT",
-      "grid_spacing": 0.004,
-      "initial_quantity": 0.001,
-      "leverage": 20,
-      "contract_type": "USDT"
-    },
-    {
-      "name": "ETHUSDT",
-      "grid_spacing": 0.005,
-      "initial_quantity": 0.01,
-      "leverage": 20,
-      "contract_type": "USDT"
-    },
-    {
-      "name": "XRPUSDT",
-      "grid_spacing": 0.001,
+      "name": "SUI",
+      "grid_spacing": 0.006,
       "initial_quantity": 3,
-      "leverage": 20,
-      "contract_type": "USDT"
+      "leverage": 25,
+      "contract_type": "USDC"
     },
     {
-      "name": "BNBUSDT",
-      "grid_spacing": 0.003,
-      "initial_quantity": 0.1,
+      "name": "SOL",
+      "grid_spacing": 0.005,
+      "initial_quantity": 0.05,
       "leverage": 20,
-      "contract_type": "USDT"
-    },
-    {
-      "name": "ADAUSDT",
-      "grid_spacing": 0.002,
-      "initial_quantity": 10,
-      "leverage": 20,
-      "contract_type": "USDT"
+      "contract_type": "USDC"
     }
   ]
 } 

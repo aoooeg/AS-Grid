@@ -25,7 +25,7 @@ NOTIFICATION_INTERVAL = int(os.getenv("NOTIFICATION_INTERVAL", "3600"))
 WEBSOCKET_URL = "wss://fstream.binance.com/ws"
 ORDER_COOLDOWN_TIME = 60
 SYNC_TIME = 3
-ORDER_FIRST_TIME = 2
+ORDER_FIRST_TIME = 1
 
 # 日志配置
 os.makedirs("log", exist_ok=True)
