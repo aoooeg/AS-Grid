@@ -28,6 +28,7 @@ services:
     volumes:
       - ./log:/app/log
       - ./config:/app/config:ro  # 只读配置目录
+      - ./.env:/app/.env:ro  # 环境变量文件
       - ./symbols.yaml:/app/symbols.yaml:ro  # 多币种配置文件
       - ./symbols.json:/app/symbols.json:ro  # 多币种配置文件（可选）
     
