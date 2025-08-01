@@ -1,135 +1,169 @@
-# AS网格交易机器人
+# AS Grid Trading Bot
 
-这是一个支持多交易所的高级网格交易机器人，目前支持 Binance、Gate.io和OKX，支持双向持仓模式的永续合约交易，具备智能风险控制和价差监控功能。支持单币种和多币种两种运行模式。
+[English](README.md) | [中文](docs/README_ZN.md)
 
-## ✨ 核心特性
+<div align="center">
 
-### 🎯 交易策略
-- **双向网格交易**: 同时进行多头和空头网格交易，提高市场适应性
-- **动态网格调整**: 根据持仓情况和市场价格动态调整网格间距
-- **智能开仓/止盈**: 自动识别持仓状态，智能挂单和止盈
-- **多币种支持**: 支持同时运行多个币种的网格交易策略
+![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
+![Docker](https://img.shields.io/badge/Docker-Ready-green.svg)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)
 
-### 🛡️ 风险控制
-- **持仓阈值管理**: 
-  - `POSITION_THRESHOLD`: 极限持仓阈值，超过后暂停新开仓
-  - `POSITION_LIMIT`: 持仓监控阈值，触发双倍止盈策略
-- **库存风险控制**: 双向持仓达到阈值时自动部分平仓
-- **价差监控**: 实时监控买卖单价差，防止网格偏移
-- **订单超时管理**: 超过300秒未成交的挂单自动取消
+**Advanced Grid Trading Bot with Multi-Exchange Support**
 
-### 📊 实时监控
-- **WebSocket 数据流**: 
-  - 实时价格更新 (ticker)
-  - 持仓变化监控 (positions)
-  - 挂单状态更新 (orders)
-  - 最佳买卖价监控 (book_ticker)
-  - 账户余额变化 (balances)
-- **多重数据同步**: REST API + WebSocket 双重确保数据准确性
+*Intelligent bidirectional grid trading with real-time risk control and multi-currency support*
 
-### 🔧 智能功能
-- **价差自动纠正**: 检测到价差超过阈值时自动重新对齐网格
-- **订单冷却机制**: 锁仓后设置反向挂单冷却时间
-- **精度自适应**: 自动获取交易对的价格和数量精度
+[🚀 Quick Start](#-quick-start) • [📋 Features](#-features) • [🔧 Configuration](#-configuration) • [📊 Monitoring](#-monitoring) • [⚠️ Security](#-security)
 
-## 🚀 快速开始
+</div>
 
-### 选择运行模式
+---
 
-**单币种模式**: 适合新手用户，只交易一个币种，配置简单
-**多币种模式**: 适合有经验的用户，同时交易多个币种，收益更高
+## 📋 Features
 
-### 选择交易所
+### 🎯 Core Trading Strategy
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **Bidirectional Grid Trading** | Simultaneous long/short positions with dynamic adjustment | Enhanced market adaptability and risk distribution |
+| **Multi-Currency Support** | Trade multiple currencies simultaneously | Diversified portfolio and higher potential returns |
+| **Intelligent Risk Control** | Real-time position monitoring with automatic thresholds | Prevents over-exposure and manages drawdowns |
+| **Spread Monitoring** | Automatic grid realignment when spreads exceed thresholds | Maintains optimal grid efficiency |
 
-**🏆 推荐币安 (Binance)**: 功能最完善，支持多币种，风险控制完善
-**🥈 可选 Gate.io**: 仅支持单币种，功能相对简单
-**🥉 不推荐 OKX**: 功能基础，位于旧版本目录
+### 🛡️ Risk Management
+- **Position Threshold Management**: Automatic position limits with `POSITION_THRESHOLD` and `POSITION_LIMIT`
+- **Inventory Risk Control**: Partial position closing when bidirectional positions reach thresholds
+- **Order Timeout Management**: Automatic cancellation of pending orders exceeding 300 seconds
+- **Real-time Monitoring**: WebSocket data streams for instant market response
 
-### 1. 克隆项目
+### 🔧 Smart Features
+- **Dynamic Grid Adjustment**: Grid spacing optimization based on market conditions
+- **Automatic Spread Correction**: Grid realignment when price spreads exceed thresholds
+- **Order Cooldown Mechanism**: Prevents excessive trading frequency
+- **Precision Adaptation**: Automatic acquisition of trading pair precision requirements
+
+## 🏆 Supported Exchanges
+
+| Exchange | Single Currency | Multi Currency | Risk Control | Recommendation |
+|----------|----------------|----------------|--------------|----------------|
+| **Binance** | ✅ | ✅ | Advanced | 🏆 **Recommended** |
+| **Gate.io** | ✅ | ❌ | Basic | 🥈 Alternative |
+| **OKX** | ✅ | ❌ | Basic | 🥉 Legacy |
+
+### Exchange Comparison
+
+**🏆 Binance (Recommended)**
+- ✅ Most comprehensive features with extensive optimization
+- ✅ Supports both single and multi-currency modes
+- ✅ Advanced bidirectional position management
+- ✅ Real-time spread monitoring and automatic correction
+- ✅ Intelligent profit-taking and risk management
+- ✅ Supports USDT and USDC contracts
+
+**🥈 Gate.io (Alternative)**
+- ✅ Relatively comprehensive features
+- ❌ Single currency mode only
+- ✅ Basic grid trading functionality
+- ✅ Suitable for simple usage scenarios
+
+**🥉 OKX (Legacy)**
+- ⚠️ Basic features only
+- ❌ Located in legacy directory, no longer maintained
+- ⚠️ Recommended for learning reference only
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Docker and Docker Compose installed
+- API keys from supported exchanges
+- Basic understanding of grid trading strategies
+
+### 1. Clone Repository
 ```bash
 git clone <your-repo-url>
 cd grid-trading-bot
 ```
 
-### 2. 配置环境变量
+### 2. Configure Environment
 
-#### 单币种模式
+#### Single Currency Mode
 ```bash
-# 复制示例配置文件
+# Copy and configure environment file
 cp config/env.example .env
-
-# 编辑配置文件，填入你的 API 信息
 nano .env
 ```
 
-#### 多币种模式
+#### Multi-Currency Mode
 ```bash
-# 复制示例配置文件
+# Configure environment and symbols
 cp config/env.example .env
-
-# 编辑配置文件，填入你的 API 信息
-nano .env
-
-# 创建多币种配置文件
 cp config/symbols.yaml config/symbols.yaml.backup
+nano .env
 nano config/symbols.yaml
 ```
 
-### 3. 启动机器人
+### 3. Start Trading Bot
 
-#### 单币种模式
+#### Single Currency Mode
 ```bash
-# 构建并启动
+# Build and start
 ./scripts/deploy.sh start
 
-# 或者分步执行
-./scripts/deploy.sh build    # 构建镜像
-./scripts/deploy.sh start    # 启动容器
+# Or step by step
+./scripts/deploy.sh build    # Build image
+./scripts/deploy.sh start    # Start container
 ```
 
-#### 多币种模式
+#### Multi-Currency Mode
 ```bash
-# 启动多币种模式
+# Start multi-currency mode
 ./scripts/deploy.sh multi-start
 
-# 查看多币种日志
+# View logs
 ./scripts/deploy.sh multi-logs
 ```
 
-## 📋 配置说明
+## 🔧 Configuration
 
-### 单币种模式配置
+### Environment Variables
 
-在 `.env` 文件中配置以下重要参数：
+#### Exchange Configuration
+```bash
+EXCHANGE=binance          # Exchange: binance, gate
+CONTRACT_TYPE=USDT        # Contract type: USDT, USDC (Binance only)
+```
 
-### 交易所配置
-- `EXCHANGE`: 交易所选择 (推荐 binance，可选 gate)
-- `CONTRACT_TYPE`: 合约类型 (USDT 或 USDC，仅币安需要)
+#### API Configuration (Required)
+```bash
+API_KEY=your_api_key_here
+API_SECRET=your_api_secret_here
+```
 
-### API 配置 (必填)
-- `API_KEY`: API 密钥
-- `API_SECRET`: API 私钥
+#### Trading Configuration
+```bash
+COIN_NAME=X               # Trading currency
+GRID_SPACING=0.004       # Grid spacing (0.4%)
+INITIAL_QUANTITY=1       # Initial trading quantity
+LEVERAGE=20              # Leverage multiplier
+```
 
-### 交易配置
-- `COIN_NAME`: 交易币种 (默认: X)
-- `GRID_SPACING`: 网格间距 (默认: 0.004，即 0.4%)
-- `INITIAL_QUANTITY`: 初始交易数量 (默认: 1 张)
-- `LEVERAGE`: 杠杆倍数 (默认: 20)
+#### Advanced Configuration (Optimized Defaults)
+```bash
+# Risk Control Thresholds (Auto-calculated)
+POSITION_THRESHOLD=10     # Position lock threshold
+POSITION_LIMIT=5         # Position quantity threshold
 
-### 高级配置 (代码中已优化默认值)
-- **风险控制阈值**: 
-  - `POSITION_THRESHOLD`: 10 * INITIAL_QUANTITY / GRID_SPACING * 2 / 100 (锁仓阈值)
-  - `POSITION_LIMIT`: 5 * INITIAL_QUANTITY / GRID_SPACING * 2 / 100 (持仓数量阈值)
-- **时间控制**:
-  - `ORDER_COOLDOWN_TIME`: 60秒 (锁仓后的反向挂单冷却时间)
-  - `SYNC_TIME`: 3秒 (数据同步间隔)
-- **价差监控**:
-  - `PRICE_SPREAD_THRESHOLD`: GRID_SPACING * 0.1 (价差阈值：网格间距的10%)
-  - `PRICE_SPREAD_CHECK_INTERVAL`: 30秒 (价差检查间隔)
+# Time Controls
+ORDER_COOLDOWN_TIME=60   # Reverse order cooldown (seconds)
+SYNC_TIME=3             # Data synchronization interval (seconds)
 
-### 多币种模式配置
+# Spread Monitoring
+PRICE_SPREAD_THRESHOLD=0.0004  # Spread threshold (10% of grid spacing)
+PRICE_SPREAD_CHECK_INTERVAL=30 # Spread check interval (seconds)
+```
 
-创建 `config/symbols.yaml` 文件配置多个币种：
+### Multi-Currency Configuration
+
+Create `config/symbols.yaml` for multi-currency mode:
 
 ```yaml
 symbols:
@@ -146,293 +180,197 @@ symbols:
     contract_type: USDT
 ```
 
-**配置参数说明**：
-- `name`: 交易对名称 (如 BTCUSDT, ETHUSDT)
-- `grid_spacing`: 网格间距 (0.001-0.01)
-- `initial_quantity`: 初始交易数量
-- `leverage`: 杠杆倍数 (1-100)
-- `contract_type`: 合约类型 (USDT/USDC)
+## 📊 Monitoring & Management
 
-## 🛠️ 管理命令
-
+### Management Commands
 ```bash
-# 查看帮助
+# View help
 ./scripts/deploy.sh help
 
-# 单币种模式
-./scripts/deploy.sh start          # 启动单币种服务
-./scripts/deploy.sh stop           # 停止服务
-./scripts/deploy.sh restart        # 重启服务
-./scripts/deploy.sh logs           # 查看容器日志
-./scripts/deploy.sh status         # 查看状态
+# Single currency mode
+./scripts/deploy.sh start          # Start service
+./scripts/deploy.sh stop           # Stop service
+./scripts/deploy.sh restart        # Restart service
+./scripts/deploy.sh logs           # View logs
+./scripts/deploy.sh status         # View status
 
-# 多币种模式
-./scripts/deploy.sh multi-start    # 启动多币种服务
-./scripts/deploy.sh multi-logs     # 查看多币种汇总日志
-./scripts/deploy.sh bot-logs       # 查看币种详细日志
+# Multi-currency mode
+./scripts/deploy.sh multi-start    # Start multi-currency service
+./scripts/deploy.sh multi-logs     # View summary logs
+./scripts/deploy.sh bot-logs       # View detailed logs
 
-# 通用命令
-./scripts/deploy.sh build          # 构建镜像
-./scripts/deploy.sh cleanup        # 清理资源
+# General commands
+./scripts/deploy.sh build          # Build image
+./scripts/deploy.sh cleanup        # Clean up resources
 ```
 
-## 📊 监控和日志
-
-### 查看实时日志
+### Real-time Monitoring
 ```bash
+# View real-time logs
 ./scripts/deploy.sh logs
+
+# View local log files
+tail -f log/grid_BN.log           # Binance single currency
+tail -f log/multi_grid_BN.log     # Multi-currency main log
+tail -f log/status_summary.log    # Status summary
 ```
 
-### 查看本地日志文件
+### Key Monitoring Metrics
+- **Position Status**: Long/short position quantities
+- **Order Status**: Quantities and prices of various order types
+- **Spread Monitoring**: Bid-ask price difference percentage
+- **Risk Indicators**: Position threshold proximity
+- **System Status**: WebSocket connection and data sync status
 
-#### 单币种模式
-```bash
-# Gate.io 版本
-tail -f log/grid_Gate.log
+## 🧠 Trading Logic
 
-# Binance 版本
-tail -f log/grid_BN.log
-```
+### Grid Strategy Overview
+1. **Initialization**: Place entry orders when positions are zero
+2. **Position Management**: Place profit-taking and averaging orders when positions exist
+3. **Risk Control**: Enable double profit-taking when position exceeds `POSITION_LIMIT`
+4. **Spread Control**: Realign grids when spread exceeds threshold
+5. **Safety Measures**: Partial position closing and order timeout management
 
-#### 多币种模式
-```bash
-# 主控制日志
-tail -f log/multi_grid_BN.log
+### Risk Management Features
+- **Position Thresholds**: Automatic position limits with configurable thresholds
+- **Spread Monitoring**: Real-time monitoring with automatic correction
+- **Order Management**: Timeout handling and cooldown mechanisms
+- **Inventory Control**: Bidirectional position balance management
 
-# 状态汇总日志
-tail -f log/status_summary.log
+## 🐳 Docker Architecture
 
-# 特定币种日志
-tail -f log/grid_BN_BTCUSDT.log
-tail -f log/grid_BN_ETHUSDT.log
-```
+- **Base Image**: Python 3.9 Slim
+- **Runtime User**: Non-root user (trader)
+- **Resource Limits**: Memory 512M, CPU 0.5 cores
+- **Health Check**: Program status check every 30 seconds
+- **Auto Restart**: Automatic restart on abnormal exit
 
-### 关键日志信息
-- **配置验证**: 启动时显示配置参数和验证结果
-- **持仓更新**: 实时显示多头/空头持仓变化
-- **挂单状态**: 显示各类型挂单的数量和状态
-- **价差警告**: 当价差超过阈值时的警告信息
-- **风险控制**: 库存管理和平仓操作的日志
-
-### 查看容器状态
-```bash
-./deploy.sh status
-```
-
-## 🧠 交易逻辑说明
-
-### 网格策略
-1. **初始化**: 
-   - 多头持仓为0时，挂出多头开仓单
-   - 空头持仓为0时，挂出空头开仓单
-
-2. **持仓管理**:
-   - 有持仓时，挂出对应的止盈单和补仓单
-   - 持仓超过`POSITION_LIMIT`时，启用双倍止盈策略
-   - 持仓超过`POSITION_THRESHOLD`时，暂停新开仓
-
-3. **价差控制**:
-   - 定期检查多空网格价格差异
-   - 价差超过阈值时自动重新对齐网格
-   - 撤销所有挂单并重新布局
-
-4. **风险管控**:
-   - 双向持仓同时达到阈值时部分平仓
-   - 挂单超时自动取消
-   - 冷却机制防止频繁操作
-
-## 🐳 Docker 架构
-
-项目使用以下 Docker 配置：
-
-- **基础镜像**: Python 3.9 Slim
-- **运行用户**: 非 root 用户 (trader)
-- **资源限制**: 内存 512M, CPU 0.5 核心
-- **健康检查**: 每 30 秒检查程序状态
-- **自动重启**: 容器异常退出时自动重启
-
-## 📁 目录结构
+## 📁 Project Structure
 
 ```
 .
-├── config/                # 配置文件目录
-│   ├── symbols.yaml       # 多币种配置文件
-│   ├── symbols.json       # JSON格式配置文件
-│   └── env.example        # 环境变量示例
-├── scripts/               # 脚本文件目录
-│   ├── deploy.sh          # 部署和管理脚本
-│   ├── start.sh           # 启动脚本
-│   └── health_check.py    # 健康检查脚本
-├── docker/                # Docker相关文件
-│   ├── Dockerfile         # Docker镜像构建文件
-│   ├── docker-compose.yml # Docker Compose配置
-│   └── .dockerignore      # Docker忽略文件
-├── src/                   # 源代码目录
-│   ├── single_bot/        # 单币种机器人
-│   │   ├── binance_bot.py # 币安单币种版本
-│   │   └── gate_bot.py    # Gate.io单币种版本
-│   └── multi_bot/         # 多币种机器人
-│       ├── binance_multi_bot.py # 币安多币种版本
-│       └── multi_bot.py   # 多币种入口文件
-├── docs/                  # 文档目录
-├── legacy/                # 旧版本代码
-├── log/                   # 日志目录 (持久化)
-├── requirements.txt        # Python 依赖
-└── README.md              # 说明文档
+├── config/                # Configuration files
+│   ├── symbols.yaml       # Multi-currency configuration
+│   ├── symbols.json       # JSON format configuration
+│   └── env.example        # Environment variables template
+├── scripts/               # Management scripts
+│   ├── deploy.sh          # Deployment and management
+│   ├── start.sh           # Startup script
+│   └── health_check.py    # Health check script
+├── docker/                # Docker configuration
+│   ├── Dockerfile         # Docker image build
+│   ├── docker-compose.yml # Docker Compose config
+│   └── .dockerignore      # Docker ignore file
+├── src/                   # Source code
+│   ├── single_bot/        # Single currency bots
+│   │   ├── binance_bot.py # Binance single currency
+│   │   └── gate_bot.py    # Gate.io single currency
+│   └── multi_bot/         # Multi-currency bots
+│       ├── binance_multi_bot.py # Binance multi-currency
+│       └── multi_bot.py   # Multi-currency entry
+├── docs/                  # Documentation
+├── legacy/                # Legacy code
+├── log/                   # Log directory (persistent)
+├── requirements.txt        # Python dependencies
+└── README.md              # Documentation
 ```
 
-## ⚠️ 安全注意事项
+## ⚠️ Security & Risk Management
 
-### 1. API 密钥安全
-- **权限设置**: 只开启必要的合约交易权限，禁用提现权限
-- **IP 白名单**: 在交易所设置 API 的 IP 白名单
-- **密钥保护**: 不要将 `.env` 文件提交到版本控制系统
+### API Security
+- **Permission Settings**: Enable only necessary contract trading permissions
+- **IP Whitelist**: Set API IP whitelist in exchange
+- **Key Protection**: Never commit `.env` file to version control
 
-### 2. 风险控制建议
-- **测试环境**: 建议先在测试网或小资金环境运行
-- **参数调优**: 根据币种特性调整网格间距和初始数量
-- **持仓监控**: 定期检查持仓状况，避免过度集中
-- **市场适应**: 在极端市场条件下考虑暂停机器人
+### Risk Control Recommendations
+- **Test Environment**: Run on testnet or small capital environment first
+- **Parameter Tuning**: Adjust grid spacing and quantities based on currency characteristics
+- **Position Monitoring**: Regularly check position status to avoid over-concentration
+- **Market Adaptation**: Consider pausing bot during extreme market conditions
 
-### 3. 系统安全
-- **网络隔离**: 容器运行在隔离的网络环境中
-- **日志管理**: 定期清理日志文件，避免磁盘空间不足
-- **权限控制**: 使用非 root 用户运行，降低安全风险
+### System Security
+- **Network Isolation**: Containers run in isolated network environment
+- **Log Management**: Regular log file cleanup to prevent disk space issues
+- **Permission Control**: Non-root user execution to reduce security risks
 
-## 🔧 故障排除
+## 🔧 Troubleshooting
 
-### 常见问题
+### Common Issues
 
-1. **API 连接失败**
+1. **API Connection Failure**
    ```bash
-   # 检查 API 密钥配置
+   # Check API configuration
    grep API_KEY .env
    
-   # 查看错误日志
+   # View error logs
    ./scripts/deploy.sh logs
    
-   # 检查网络连接
-   curl -I https://api.gateio.ws
+   # Test connectivity
    curl -I https://fapi.binance.com
-   
-   # 推荐使用币安，功能更完善
    ```
 
-2. **容器启动失败**
+2. **Container Startup Issues**
    ```bash
-   # 检查配置文件
+   # Check configuration
    docker-compose config
    
-   # 查看容器状态
+   # View container status
    docker ps -a
    
-   # 检查资源使用
+   # Check resources
    docker stats
    ```
 
-3. **权限问题**
+3. **Permission Issues**
    ```bash
-   # 检查日志目录权限
-   ls -la log/
-   
-   # 修复权限
+   # Fix log directory permissions
    chmod 755 log/
    sudo chown 1000:1000 log/
    ```
 
-4. **价差异常**
-   - 检查网络延迟是否过高
-   - 确认交易对流动性是否充足
-   - 考虑调整 `PRICE_SPREAD_THRESHOLD` 参数
+### Performance Optimization
+- Adjust `SYNC_TIME` to balance real-time performance and efficiency
+- Monitor memory usage and restart container when necessary
+- Adjust container resource limits based on server performance
 
-5. **挂单失败**
-   - 检查账户余额是否充足
-   - 确认杠杆设置是否正确
-   - 验证最小下单数量设置
+## 📞 Support
 
-### 日志级别
+For issues and questions:
+1. Check log files for detailed error information
+2. Verify configuration parameters are correct
+3. Confirm exchange API permission settings
+4. Test network connectivity and exchange service status
 
-机器人使用 Python logging 模块，日志级别为 INFO。日志同时输出到：
-
-#### 单币种模式
-- 控制台 (容器日志)
-- 文件 `log/grid_Gate.log` (Gate.io版本)
-- 文件 `log/grid_BN.log` (Binance版本)
-
-#### 多币种模式
-- 控制台 (容器日志)
-- 文件 `log/multi_grid_BN.log` (主控制日志)
-- 文件 `log/status_summary.log` (状态汇总日志)
-- 文件 `log/grid_BN_[币种].log` (各币种详细日志)
-
-### 监控指标
-
-#### 单币种模式
-- **持仓状态**: 多头/空头持仓数量
-- **挂单状态**: 各类型挂单的数量和价格
-- **价差监控**: 买卖单价格差异百分比
-- **风险指标**: 持仓是否接近阈值
-- **系统状态**: WebSocket 连接状态和数据同步时间
-
-#### 多币种模式
-- **总体状态**: 所有币种的运行状态汇总
-- **币种状态**: 每个币种的持仓和挂单状态
-- **风险监控**: 各币种的风险指标
-- **性能指标**: 多币种并行处理的性能统计
-
-## 🔮 版本支持
-
-### 交易所选择建议
-
-**🏆 币安 (Binance) - 最佳选择**
-- ✅ 功能最完善，经过大量优化
-- ✅ 支持单币种和多币种模式
-- ✅ 双向持仓模式，风险控制完善
-- ✅ 实时价差监控和自动纠正
-- ✅ 智能止盈和风险管理系统
-- ✅ 支持 USDT 和 USDC 合约
-
-**🥈 Gate.io - 次优选择**
-- ✅ 功能相对完善
-- ❌ 仅支持单币种模式
-- ✅ 基本的网格交易功能
-- ✅ 适合简单使用场景
-
-**🥉 OKX - 基础功能**
-- ⚠️ 仅提供基本功能
-- ❌ 功能相对简单
-- ❌ 位于 legacy 目录，不再维护
-- ⚠️ 建议仅用于学习参考
-
-### 单币种模式
-- **Binance**: `src/single_bot/binance_bot.py` - 币安合约版本（推荐）
-- **Gate.io**: `src/single_bot/gate_bot.py` - Gate.io合约版本
-- **OKX**: `legacy/grid_OK_XRP.py` - 欧易合约版本（旧版本，不推荐）
-
-### 多币种模式
-- **Binance**: `src/multi_bot/multi_bot.py` - 币安多币种版本（唯一选择）
-
-**推荐使用币安版本**，因为功能最完善，经过大量优化，支持多币种模式，风险控制更完善。
-
-## 📞 支持
-
-如遇到问题，请：
-1. 检查日志文件获取详细错误信息
-2. 确认配置参数是否正确
-3. 验证交易所 API 权限设置
-4. 查看网络连接和交易所服务状态
-
-### 性能优化建议
-- 适当调整 `SYNC_TIME` 以平衡实时性和性能
-- 根据服务器性能调整容器资源限制
-- 监控内存使用情况，必要时重启容器
+### Performance Recommendations
+- Use Binance for most comprehensive features and best performance
+- Start with single currency mode for beginners
+- Gradually scale to multi-currency mode for experienced users
+- Monitor system resources and adjust container limits accordingly
 
 ---
 
-**⚠️ 免责声明**: 本软件仅供学习和研究使用，使用者需要承担所有交易风险。网格交易在趋势行情中可能面临较大亏损，请根据自身风险承受能力谨慎使用。作者不对任何投资损失负责。
+## 📈 Risk Warning
 
-**📈 风险提示**: 
-- 网格交易适合震荡行情，单边趋势行情风险较大
-- 杠杆交易风险极高，可能导致全部资金损失
-- 请确保充分理解交易机制后再使用
-- 建议设置止损机制，避免极端情况下的重大损失
+**⚠️ Important Disclaimer**: This software is for educational and research purposes only. Users bear all trading risks. Grid trading may face significant losses in trending markets. Please use with caution based on your risk tolerance.
+
+**Key Risk Factors**:
+- Grid trading is suitable for sideways markets, trending markets carry higher risks
+- Leveraged trading is extremely risky and may result in total capital loss
+- Ensure full understanding of trading mechanisms before use
+- Consider setting stop-loss mechanisms to avoid major losses in extreme situations
+
+**📊 Risk Management Tips**:
+- Start with small amounts and gradually increase
+- Monitor positions regularly and adjust parameters as needed
+- Consider market conditions when deciding to run the bot
+- Always maintain adequate account balance for margin requirements
+
+---
+
+<div align="center">
+
+**Made with ❤️ for the crypto trading community**
+
+[Report Bug](https://github.com/your-repo/issues) • [Request Feature](https://github.com/your-repo/issues) • [Contributing](CONTRIBUTING.md)
+
+</div>
