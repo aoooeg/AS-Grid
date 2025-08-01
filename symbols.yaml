@@ -1,0 +1,59 @@
+# 多币种网格交易配置文件
+# 每个币种可以独立设置网格间距、初始数量和杠杆倍数
+
+symbols:
+  # 比特币 - 大网格间距，小数量
+  - name: BTCUSDT
+    grid_spacing: 0.004
+    initial_quantity: 0.001
+    leverage: 20
+    contract_type: USDT
+    
+  # 以太坊 - 中等网格间距
+  - name: ETHUSDT
+    grid_spacing: 0.005
+    initial_quantity: 0.01
+    leverage: 20
+    contract_type: USDT
+    
+  # 瑞波币 - 小网格间距，大数量
+  - name: XRPUSDT
+    grid_spacing: 0.001
+    initial_quantity: 3
+    leverage: 20
+    contract_type: USDT
+    
+  # 币安币 - 中等网格间距
+  - name: BNBUSDT
+    grid_spacing: 0.003
+    initial_quantity: 0.1
+    leverage: 20
+    contract_type: USDT
+    
+  # 卡尔达诺 - 小网格间距
+  - name: ADAUSDT
+    grid_spacing: 0.002
+    initial_quantity: 10
+    leverage: 20
+    contract_type: USDT
+    
+  # 狗狗币 - 小网格间距，大数量
+  - name: DOGEUSDT
+    grid_spacing: 0.001
+    initial_quantity: 100
+    leverage: 20
+    contract_type: USDT
+    
+  # 波卡 - 中等网格间距
+  - name: DOTUSDT
+    grid_spacing: 0.003
+    initial_quantity: 1
+    leverage: 20
+    contract_type: USDT
+    
+  # 莱特币 - 中等网格间距
+  - name: LTCUSDT
+    grid_spacing: 0.003
+    initial_quantity: 0.1
+    leverage: 20
+    contract_type: USDT 

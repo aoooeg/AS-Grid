@@ -119,6 +119,59 @@ cleanup() {
     print_success "清理完成"
 }
 
+# 多币种相关函数
+start_multi_container() {
+    if ! check_env_file; then
+        print_error "请先配置 .env 文件"
+        exit 1
+    fi
+    
+    # 检查配置文件
+    if [ ! -f "symbols.yaml" ] && [ ! -f "symbols.json" ]; then
+        print_error "配置文件不存在，请创建 symbols.yaml 或 symbols.json"
+        exit 1
+    fi
+    
+    create_directories
+    
+    if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
+        print_warning "容器已在运行，正在重启..."
+        docker-compose restart
+    else
+        print_info "启动多币种网格交易机器人..."
+        # 设置环境变量指示使用多币种模式
+        export GRID_MODE="multi"
+        docker-compose up -d
+    fi
+    
+    print_success "多币种网格交易机器人已启动"
+    print_info "使用 './deploy.sh multi-logs' 查看汇总日志"
+}
+
+show_multi_logs() {
+    print_info "显示多币种汇总日志..."
+    if [ -f "log/status_summary.log" ]; then
+        echo "=== 状态汇总日志 ==="
+        tail -f log/status_summary.log
+    else
+        print_warning "状态汇总日志文件不存在"
+        show_logs
+    fi
+}
+
+show_bot_logs() {
+    print_info "显示币种详细日志..."
+    if [ -d "log" ]; then
+        echo "可用的币种日志文件:"
+        ls -la log/grid_BN_*.log 2>/dev/null || echo "暂无币种日志文件"
+        echo ""
+        echo "查看特定币种日志: tail -f log/grid_BN_[币种].log"
+        echo "例如: tail -f log/grid_BN_BTCUSDT.log"
+    else
+        print_warning "日志目录不存在"
+    fi
+}
+
 # 主逻辑
 case "${1:-start}" in
     "build")
@@ -126,6 +179,9 @@ case "${1:-start}" in
         ;;
     "start")
         start_container
+        ;;
+    "multi-start")
+        start_multi_container
         ;;
     "stop")
         stop_container
@@ -135,6 +191,12 @@ case "${1:-start}" in
         ;;
     "logs")
         show_logs
+        ;;
+    "multi-logs")
+        show_multi_logs
+        ;;
+    "bot-logs")
+        show_bot_logs
         ;;
     "status")
         show_status
@@ -146,14 +208,17 @@ case "${1:-start}" in
         echo "使用方法: $0 [命令]"
         echo ""
         echo "可用命令:"
-        echo "  build    - 构建 Docker 镜像"
-        echo "  start    - 启动交易机器人 (默认)"
-        echo "  stop     - 停止交易机器人"
-        echo "  restart  - 重启交易机器人"
-        echo "  logs     - 查看日志"
-        echo "  status   - 查看状态"
-        echo "  cleanup  - 清理 Docker 资源"
-        echo "  help     - 显示此帮助信息"
+        echo "  build       - 构建 Docker 镜像"
+        echo "  start       - 启动单币种交易机器人 (默认)"
+        echo "  multi-start - 启动多币种交易机器人"
+        echo "  stop        - 停止交易机器人"
+        echo "  restart     - 重启交易机器人"
+        echo "  logs        - 查看容器日志"
+        echo "  multi-logs  - 查看多币种汇总日志"
+        echo "  bot-logs    - 查看币种详细日志"
+        echo "  status      - 查看状态"
+        echo "  cleanup     - 清理 Docker 资源"
+        echo "  help        - 显示此帮助信息"
         ;;
     *)
         print_error "未知命令: $1"

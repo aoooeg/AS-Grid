@@ -24,10 +24,12 @@ services:
       - ENABLE_NOTIFICATIONS=${ENABLE_NOTIFICATIONS:-true}
       - NOTIFICATION_INTERVAL=${NOTIFICATION_INTERVAL:-3600}
     
-    # 挂载卷 - 持久化日志
+    # 挂载卷 - 持久化日志和配置
     volumes:
       - ./log:/app/log
       - ./config:/app/config:ro  # 只读配置目录
+      - ./symbols.yaml:/app/symbols.yaml:ro  # 多币种配置文件
+      - ./symbols.json:/app/symbols.json:ro  # 多币种配置文件（可选）
     
     # 网络配置
     networks:
@@ -45,7 +47,7 @@ services:
     
     # 健康检查
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      test: ["CMD", "python", "health_check.py"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -1,16 +1,206 @@
 #!/bin/bash
 
-# 设置时区
-export TZ=UTC
+# 网格交易机器人启动脚本
+# 支持单币种和多币种模式
 
-# 根据EXCHANGE环境变量选择运行哪个脚本
-if [ "$EXCHANGE" = "binance" ]; then
-    echo "启动币安网格交易机器人..."
-    python grid_BN.py
-elif [ "$EXCHANGE" = "gate" ]; then
-    echo "启动Gate.io网格交易机器人..."
-    python grid_Gate.py
-else
-    echo "未指定交易所或交易所不支持，默认启动Gate.io机器人..."
-    python grid_Gate.py
-fi 
+set -e
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+print_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+check_requirements() {
+    print_info "检查运行环境..."
+    
+    # 检查 Python
+    if ! command -v python3 &> /dev/null; then
+        print_error "Python3 未安装"
+        exit 1
+    fi
+    
+    # 检查必要文件
+    if [ ! -f ".env" ]; then
+        print_error ".env 文件不存在，请先配置环境变量"
+        exit 1
+    fi
+    
+    # 检查依赖
+    if ! python3 -c "import ccxt, websockets, yaml" 2>/dev/null; then
+        print_warning "缺少依赖包，正在安装..."
+        pip3 install ccxt websockets python-dotenv pyyaml aiohttp
+    fi
+    
+    print_success "环境检查完成"
+}
+
+start_single_bot() {
+    print_info "启动单币种网格机器人..."
+    
+    if [ ! -f "grid_BN.py" ]; then
+        print_error "grid_BN.py 文件不存在"
+        exit 1
+    fi
+    
+    # 创建 PID 文件
+    echo $$ > grid_bot.pid
+    
+    # 启动单币种机器人
+    python3 grid_BN.py
+    
+    # 清理 PID 文件
+    rm -f grid_bot.pid
+}
+
+start_multi_bot() {
+    print_info "启动多币种网格机器人..."
+    
+    if [ ! -f "multi_grid_BN.py" ]; then
+        print_error "multi_grid_BN.py 文件不存在"
+        exit 1
+    fi
+    
+    # 检查配置文件
+    if [ ! -f "symbols.yaml" ] && [ ! -f "symbols.json" ]; then
+        print_error "配置文件不存在，请创建 symbols.yaml 或 symbols.json"
+        exit 1
+    fi
+    
+    # 创建 PID 文件
+    echo $$ > grid_bot.pid
+    
+    # 启动多币种机器人
+    python3 multi_grid_BN.py
+    
+    # 清理 PID 文件
+    rm -f grid_bot.pid
+}
+
+show_help() {
+    echo "网格交易机器人启动脚本"
+    echo ""
+    echo "使用方法: $0 [选项]"
+    echo ""
+    echo "选项:"
+    echo "  single     - 启动单币种模式 (默认)"
+    echo "  multi      - 启动多币种模式"
+    echo "  docker     - 使用 Docker 启动"
+    echo "  docker-multi - 使用 Docker 启动多币种模式"
+    echo "  logs       - 查看日志"
+    echo "  status     - 查看状态"
+    echo "  stop       - 停止机器人"
+    echo "  help       - 显示此帮助信息"
+    echo ""
+    echo "示例:"
+    echo "  $0 single      # 启动单币种模式"
+    echo "  $0 multi       # 启动多币种模式"
+    echo "  $0 docker      # 使用 Docker 启动"
+    echo "  $0 logs        # 查看日志"
+}
+
+show_logs() {
+    print_info "查看日志..."
+    
+    if [ -f "log/multi_grid_BN.log" ]; then
+        echo "=== 多币种主日志 ==="
+        tail -f log/multi_grid_BN.log
+    elif [ -f "log/grid_BN.log" ]; then
+        echo "=== 单币种日志 ==="
+        tail -f log/grid_BN.log
+    else
+        print_warning "未找到日志文件"
+    fi
+}
+
+show_status() {
+    print_info "查看状态..."
+    
+    if [ -f "grid_bot.pid" ]; then
+        PID=$(cat grid_bot.pid)
+        if ps -p $PID > /dev/null; then
+            print_success "机器人正在运行，PID: $PID"
+        else
+            print_warning "PID 文件存在但进程已停止"
+            rm -f grid_bot.pid
+        fi
+    else
+        print_warning "机器人未运行"
+    fi
+    
+    # 显示状态汇总
+    if [ -f "log/status_summary.log" ]; then
+        echo ""
+        echo "=== 最新状态汇总 ==="
+        tail -5 log/status_summary.log
+    fi
+}
+
+stop_bot() {
+    print_info "停止机器人..."
+    
+    if [ -f "grid_bot.pid" ]; then
+        PID=$(cat grid_bot.pid)
+        if ps -p $PID > /dev/null; then
+            kill $PID
+            print_success "已发送停止信号"
+        else
+            print_warning "进程已停止"
+        fi
+        rm -f grid_bot.pid
+    else
+        print_warning "未找到 PID 文件"
+    fi
+}
+
+# 主逻辑
+case "${1:-single}" in
+    "single")
+        check_requirements
+        start_single_bot
+        ;;
+    "multi")
+        check_requirements
+        start_multi_bot
+        ;;
+    "docker")
+        ./deploy.sh start
+        ;;
+    "docker-multi")
+        ./deploy.sh multi-start
+        ;;
+    "logs")
+        show_logs
+        ;;
+    "status")
+        show_status
+        ;;
+    "stop")
+        stop_bot
+        ;;
+    "help" | "--help" | "-h")
+        show_help
+        ;;
+    *)
+        print_error "未知选项: $1"
+        show_help
+        exit 1
+        ;;
+esac 
