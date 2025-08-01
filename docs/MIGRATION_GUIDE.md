@@ -11,7 +11,7 @@
 ```bash
 # 备份原有配置
 cp .env .env.backup
-cp grid_BN.py grid_BN.py.backup
+cp src/single_bot/binance_bot.py src/single_bot/binance_bot.py.backup
 
 # 备份日志（可选）
 cp -r log log.backup
@@ -70,10 +70,10 @@ python3 -c "from dotenv import load_dotenv; load_dotenv(); import os; print('API
 
 ```bash
 # 启动多币种版本进行测试
-python3 multi_grid_BN.py
+python3 multi_src/single_bot/binance_bot.py
 
 # 或使用 Docker
-./deploy.sh multi-start
+./scripts/deploy.sh multi-start
 ```
 
 ## 配置对比
@@ -104,7 +104,7 @@ symbols:
 
 | 功能 | 单币种版本 | 多币种版本 | 说明 |
 |------|------------|------------|------|
-| 启动方式 | `python3 grid_BN.py` | `python3 multi_grid_BN.py` | 多币种支持 |
+| 启动方式 | `python3 src/single_bot/binance_bot.py` | `python3 multi_src/single_bot/binance_bot.py` | 多币种支持 |
 | 配置文件 | `.env` | `.env` + `symbols.yaml` | 分离配置 |
 | 日志文件 | `log/grid_BN.log` | `log/multi_grid_BN.log` + `log/grid_BN_*.log` | 独立日志 |
 | 状态监控 | 无 | `log/status_summary.log` | 状态汇总 |
@@ -118,13 +118,13 @@ symbols:
 1. **保持单币种运行**
    ```bash
    # 继续使用原有方式
-   python3 grid_BN.py
+   python3 src/single_bot/binance_bot.py
    ```
 
 2. **并行测试多币种**
    ```bash
    # 在测试环境运行多币种
-   python3 multi_grid_BN.py
+   python3 multi_src/single_bot/binance_bot.py
    ```
 
 3. **逐步迁移**
@@ -147,7 +147,7 @@ symbols:
 
 3. **启动多币种版本**
    ```bash
-   python3 multi_grid_BN.py
+   python3 multi_src/single_bot/binance_bot.py
    ```
 
 ## 测试验证
@@ -177,7 +177,7 @@ tail -f log/grid_BN_XRPUSDT.log
 python3 health_check.py
 
 # 5. 检查 Docker 状态（如果使用）
-./deploy.sh status
+./scripts/deploy.sh status
 ```
 
 ## 回退方案
@@ -187,7 +187,7 @@ python3 health_check.py
 1. **停止多币种版本**
    ```bash
    # 如果使用 Docker
-   ./deploy.sh stop
+   ./scripts/deploy.sh stop
    
    # 如果直接运行
    # Ctrl+C 停止进程
@@ -196,10 +196,10 @@ python3 health_check.py
 2. **恢复单币种版本**
    ```bash
    # 使用原有的启动方式
-   python3 grid_BN.py
+   python3 src/single_bot/binance_bot.py
    
    # 或使用 Docker
-   ./deploy.sh start
+   ./scripts/deploy.sh start
    ```
 
 3. **恢复配置**
@@ -212,7 +212,7 @@ python3 health_check.py
 
 ### Q1: 多币种版本会影响原有的单币种功能吗？
 
-**A**: 不会。多币种版本完全向后兼容，原有的 `grid_BN.py` 可以继续正常使用。
+**A**: 不会。多币种版本完全向后兼容，原有的 `src/single_bot/binance_bot.py` 可以继续正常使用。
 
 ### Q2: 如何添加新的币种？
 
@@ -269,12 +269,12 @@ python3 health_check.py
 
 1. **使用原有的单币种启动方式**
    ```bash
-   python3 grid_BN.py
+   python3 src/single_bot/binance_bot.py
    ```
 
 2. **使用 Docker 单币种模式**
    ```bash
-   ./deploy.sh start
+   ./scripts/deploy.sh start
    ```
 
 ## 性能优化建议
@@ -332,7 +332,7 @@ tail -f log/grid_BN_[币种].log
 grep -A 5 "[币种]" symbols.yaml
 
 # 重启特定币种（需要重启整个服务）
-./deploy.sh restart
+./scripts/deploy.sh restart
 ```
 
 ### 问题 3: 日志文件过大

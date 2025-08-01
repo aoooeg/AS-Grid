@@ -38,8 +38,8 @@ check_requirements() {
     fi
     
     # 检查必要文件
-    if [ ! -f ".env" ]; then
-        print_error ".env 文件不存在，请先配置环境变量"
+    if [ ! -f "config/.env" ]; then
+        print_error "config/.env 文件不存在，请先配置环境变量"
         exit 1
     fi
     
@@ -55,8 +55,8 @@ check_requirements() {
 start_single_bot() {
     print_info "启动单币种网格机器人..."
     
-    if [ ! -f "grid_BN.py" ]; then
-        print_error "grid_BN.py 文件不存在"
+    if [ ! -f "src/single_bot/binance_bot.py" ]; then
+        print_error "src/single_bot/binance_bot.py 文件不存在"
         exit 1
     fi
     
@@ -64,7 +64,7 @@ start_single_bot() {
     echo $$ > grid_bot.pid
     
     # 启动单币种机器人
-    python3 grid_BN.py
+    python3 src/single_bot/binance_bot.py
     
     # 清理 PID 文件
     rm -f grid_bot.pid
@@ -73,14 +73,14 @@ start_single_bot() {
 start_multi_bot() {
     print_info "启动多币种网格机器人..."
     
-    if [ ! -f "multi_grid_BN.py" ]; then
-        print_error "multi_grid_BN.py 文件不存在"
+    if [ ! -f "src/multi_bot/multi_bot.py" ]; then
+        print_error "src/multi_bot/multi_bot.py 文件不存在"
         exit 1
     fi
     
     # 检查配置文件
-    if [ ! -f "symbols.yaml" ] && [ ! -f "symbols.json" ]; then
-        print_error "配置文件不存在，请创建 symbols.yaml 或 symbols.json"
+    if [ ! -f "config/symbols.yaml" ] && [ ! -f "config/symbols.json" ]; then
+        print_error "配置文件不存在，请创建 config/symbols.yaml 或 config/symbols.json"
         exit 1
     fi
     
@@ -88,7 +88,7 @@ start_multi_bot() {
     echo $$ > grid_bot.pid
     
     # 启动多币种机器人
-    python3 multi_grid_BN.py
+    python3 src/multi_bot/multi_bot.py
     
     # 清理 PID 文件
     rm -f grid_bot.pid

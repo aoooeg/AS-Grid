@@ -35,14 +35,14 @@ print_error() {
 }
 
 check_env_file() {
-    if [ ! -f ".env" ]; then
+    if [ ! -f "config/.env" ]; then
         print_warning ".env 文件不存在，正在从示例文件创建..."
-        if [ -f "env.example" ]; then
-            cp env.example .env
+        if [ -f "config/env.example" ]; then
+            cp config/env.example .env
             print_info "请编辑 .env 文件并设置你的 API 密钥"
             return 1
         else
-            print_error "env.example 文件不存在，无法创建 .env 文件"
+            print_error "config/env.example 文件不存在，无法创建 .env 文件"
             return 1
         fi
     fi
@@ -52,8 +52,6 @@ check_env_file() {
 create_directories() {
     print_info "创建必要的目录..."
     mkdir -p log
-    mkdir -p config
-    chmod 755 log config
 }
 
 build_image() {
@@ -72,10 +70,10 @@ start_container() {
     
     if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
         print_warning "容器已在运行，正在重启..."
-        docker-compose restart
+        docker-compose -f docker/docker-compose.yml restart
     else
         print_info "启动网格交易机器人..."
-        docker-compose up -d
+        docker-compose -f docker/docker-compose.yml up -d
     fi
     
     print_success "网格交易机器人已启动"
@@ -84,24 +82,24 @@ start_container() {
 
 stop_container() {
     print_info "停止网格交易机器人..."
-    docker-compose down
+    docker-compose -f docker/docker-compose.yml down
     print_success "网格交易机器人已停止"
 }
 
 restart_container() {
     print_info "重启网格交易机器人..."
-    docker-compose restart
+    docker-compose -f docker/docker-compose.yml restart
     print_success "网格交易机器人已重启"
 }
 
 show_logs() {
     print_info "显示容器日志..."
-    docker-compose logs -f --tail=100
+    docker-compose -f docker/docker-compose.yml logs -f --tail=100
 }
 
 show_status() {
     print_info "容器状态:"
-    docker-compose ps
+    docker-compose -f docker/docker-compose.yml ps
     echo
     
     if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
@@ -127,8 +125,8 @@ start_multi_container() {
     fi
     
     # 检查配置文件
-    if [ ! -f "symbols.yaml" ] && [ ! -f "symbols.json" ]; then
-        print_error "配置文件不存在，请创建 symbols.yaml 或 symbols.json"
+    if [ ! -f "config/symbols.yaml" ] && [ ! -f "config/symbols.json" ]; then
+        print_error "配置文件不存在，请创建 config/symbols.yaml 或 config/symbols.json"
         exit 1
     fi
     
@@ -136,12 +134,12 @@ start_multi_container() {
     
     if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
         print_warning "容器已在运行，正在重启..."
-        docker-compose restart
+        docker-compose -f docker/docker-compose.yml restart
     else
         print_info "启动多币种网格交易机器人..."
         # 设置环境变量指示使用多币种模式
         export GRID_MODE="multi"
-        docker-compose up -d
+        docker-compose -f docker/docker-compose.yml up -d
     fi
     
     print_success "多币种网格交易机器人已启动"

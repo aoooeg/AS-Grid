@@ -55,13 +55,13 @@ ls -la log/
 
 ```bash
 # 方式一：直接运行
-python3 multi_grid_BN.py
+python3 multi_src/single_bot/binance_bot.py
 
 # 方式二：使用启动脚本
-./start.sh multi
+./scripts/start.sh multi
 
 # 方式三：使用 Docker
-./deploy.sh multi-start
+./scripts/deploy.sh multi-start
 ```
 
 ### 步骤 2: 验证启动状态
@@ -288,7 +288,7 @@ python3 health_check.py
 
 ```bash
 # 每日检查
-./deploy.sh status
+./scripts/deploy.sh status
 python3 health_check.py
 
 # 每周检查

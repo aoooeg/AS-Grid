@@ -9,7 +9,7 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
-from bot_binance import BinanceGridBot
+from .binance_multi_bot import BinanceGridBot
 
 # 加载环境变量
 load_dotenv()
@@ -46,7 +46,7 @@ file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(m
 file_handler.setFormatter(file_formatter)
 main_logger.addHandler(file_handler)
 
-def load_config(config_file='symbols.yaml'):
+def load_config(config_file='config/symbols.yaml'):
     """
     加载配置文件
     

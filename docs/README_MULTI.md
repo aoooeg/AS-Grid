@@ -8,15 +8,15 @@
 
 ```
 grid/
-├── bot_binance.py          # BinanceGridBot 类实现
-├── grid_BN.py              # 单币种入口文件
-├── multi_grid_BN.py        # 多币种入口文件
+├── src/multi_bot/binance_multi_bot.py # BinanceGridBot 类实现
+├── src/single_bot/binance_bot.py      # 单币种入口文件
+├── src/multi_bot/multi_bot.py         # 多币种入口文件
 ├── symbols.yaml            # 多币种配置文件
 ├── symbols.json            # JSON格式配置文件
-├── deploy.sh               # 部署脚本
-├── docker-compose.yml      # Docker配置
+├── scripts/deploy.sh       # 部署脚本
+├── docker/docker-compose.yml # Docker配置
 ├── health_check.py         # 健康检查脚本
-├── start.sh                # 启动脚本
+├── scripts/start.sh         # 启动脚本
 ├── .env                    # 环境变量配置
 └── log/                    # 日志目录
     ├── multi_grid_BN.log   # 主日志
@@ -61,26 +61,26 @@ symbols:
 #### 方式一：直接运行
 ```bash
 # 启动单币种模式
-python3 grid_BN.py
+python3 src/single_bot/binance_bot.py
 
 # 启动多币种模式
-python3 multi_grid_BN.py
+python3 src/multi_bot/multi_bot.py
 
 # 或使用启动脚本
-./start.sh single    # 单币种
-./start.sh multi     # 多币种
+./scripts/start.sh single    # 单币种
+./scripts/start.sh multi     # 多币种
 ```
 
 #### 方式二：Docker 运行
 ```bash
 # 构建镜像
-./deploy.sh build
+./scripts/deploy.sh build
 
 # 启动单币种模式
-./deploy.sh start
+./scripts/deploy.sh start
 
 # 启动多币种模式
-./deploy.sh multi-start
+./scripts/deploy.sh multi-start
 ```
 
 ## 详细配置说明
@@ -148,8 +148,8 @@ tail -f log/status_summary.log
 tail -f log/grid_BN_BTCUSDT.log
 
 # 使用部署脚本查看
-./deploy.sh multi-logs    # 查看汇总日志
-./deploy.sh bot-logs      # 查看币种日志
+./scripts/deploy.sh multi-logs    # 查看汇总日志
+./scripts/deploy.sh bot-logs      # 查看币种日志
 ```
 
 ### 日志轮转
@@ -186,23 +186,23 @@ docker inspect grid-trader --format='{{.State.Health.Log}}'
 ### 基本命令
 
 ```bash
-./deploy.sh build          # 构建 Docker 镜像
-./deploy.sh start          # 启动单币种模式
-./deploy.sh multi-start    # 启动多币种模式
-./deploy.sh stop           # 停止服务
-./deploy.sh restart        # 重启服务
-./deploy.sh logs           # 查看容器日志
-./deploy.sh multi-logs     # 查看汇总日志
-./deploy.sh bot-logs       # 查看币种日志
-./deploy.sh status         # 查看状态
-./deploy.sh cleanup        # 清理资源
+./scripts/deploy.sh build          # 构建 Docker 镜像
+./scripts/deploy.sh start          # 启动单币种模式
+./scripts/deploy.sh multi-start    # 启动多币种模式
+./scripts/deploy.sh stop           # 停止服务
+./scripts/deploy.sh restart        # 重启服务
+./scripts/deploy.sh logs           # 查看容器日志
+./scripts/deploy.sh multi-logs     # 查看汇总日志
+./scripts/deploy.sh bot-logs       # 查看币种日志
+./scripts/deploy.sh status         # 查看状态
+./scripts/deploy.sh cleanup        # 清理资源
 ```
 
 ### Docker 管理
 
 ```bash
 # 查看容器状态
-docker-compose ps
+docker-compose -f docker/docker-compose.yml ps
 
 # 查看资源使用
 docker stats grid-trader
@@ -211,7 +211,7 @@ docker stats grid-trader
 docker exec -it grid-trader bash
 
 # 查看容器日志
-docker-compose logs -f
+docker-compose -f docker/docker-compose.yml logs -f
 ```
 
 ## 故障排查
@@ -247,12 +247,12 @@ docker-compose logs -f
 
 ```bash
 # 完全重启
-./deploy.sh stop
-./deploy.sh multi-start
+./scripts/deploy.sh stop
+./scripts/deploy.sh multi-start
 
 # 重新构建
-./deploy.sh build
-./deploy.sh multi-start
+./scripts/deploy.sh build
+./scripts/deploy.sh multi-start
 ```
 
 ## 性能监控
@@ -304,7 +304,7 @@ grep "启动成功" log/multi_grid_BN.log
 
 ### 向后兼容
 
-- 单币种版本 `grid_BN.py` 完全兼容
+- 单币种版本 `src/single_bot/binance_bot.py` 完全兼容
 - 原有的 `.env` 配置可以直接使用
 - 原有的日志格式保持不变
 
@@ -320,16 +320,16 @@ grep "启动成功" log/multi_grid_BN.log
    # 编辑 symbols.yaml
    
    # 启动多币种模式
-   ./deploy.sh multi-start
+   ./scripts/deploy.sh multi-start
    ```
 
 2. **回退到单币种**
    ```bash
    # 停止多币种服务
-   ./deploy.sh stop
+   ./scripts/deploy.sh stop
    
    # 启动单币种服务
-   ./deploy.sh start
+   ./scripts/deploy.sh start
    ```
 
 ## 测试建议
@@ -361,7 +361,7 @@ grep "启动成功" log/multi_grid_BN.log
 
 1. **启动测试**
    ```bash
-   ./deploy.sh multi-start
+   ./scripts/deploy.sh multi-start
    ```
 
 2. **检查日志**

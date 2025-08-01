@@ -1,6 +1,6 @@
-# 网格交易机器人 Docker 部署指南
+# AS网格交易机器人
 
-这是一个支持多交易所的高级网格交易机器人，目前支持 Gate.io 和 Binance，支持双向持仓模式的永续合约交易，具备智能风险控制和价差监控功能。
+这是一个支持多交易所的高级网格交易机器人，目前支持 Gate.io 和 Binance，支持双向持仓模式的永续合约交易，具备智能风险控制和价差监控功能。支持单币种和多币种两种运行模式。
 
 ## ✨ 核心特性
 
@@ -8,6 +8,7 @@
 - **双向网格交易**: 同时进行多头和空头网格交易，提高市场适应性
 - **动态网格调整**: 根据持仓情况和市场价格动态调整网格间距
 - **智能开仓/止盈**: 自动识别持仓状态，智能挂单和止盈
+- **多币种支持**: 支持同时运行多个币种的网格交易策略
 
 ### 🛡️ 风险控制
 - **持仓阈值管理**: 
@@ -33,6 +34,11 @@
 
 ## 🚀 快速开始
 
+### 选择运行模式
+
+**单币种模式**: 适合新手用户，只交易一个币种，配置简单
+**多币种模式**: 适合有经验的用户，同时交易多个币种，收益更高
+
 ### 1. 克隆项目
 ```bash
 git clone <your-repo-url>
@@ -40,25 +46,53 @@ cd grid-trading-bot
 ```
 
 ### 2. 配置环境变量
+
+#### 单币种模式
 ```bash
 # 复制示例配置文件
-cp env.example .env
+cp config/env.example .env
 
 # 编辑配置文件，填入你的 API 信息
 nano .env
 ```
 
+#### 多币种模式
+```bash
+# 复制示例配置文件
+cp config/env.example .env
+
+# 编辑配置文件，填入你的 API 信息
+nano .env
+
+# 创建多币种配置文件
+cp config/symbols.yaml config/symbols.yaml.backup
+nano config/symbols.yaml
+```
+
 ### 3. 启动机器人
+
+#### 单币种模式
 ```bash
 # 构建并启动
-./deploy.sh start
+./scripts/deploy.sh start
 
 # 或者分步执行
-./deploy.sh build    # 构建镜像
-./deploy.sh start    # 启动容器
+./scripts/deploy.sh build    # 构建镜像
+./scripts/deploy.sh start    # 启动容器
+```
+
+#### 多币种模式
+```bash
+# 启动多币种模式
+./scripts/deploy.sh multi-start
+
+# 查看多币种日志
+./scripts/deploy.sh multi-logs
 ```
 
 ## 📋 配置说明
+
+### 单币种模式配置
 
 在 `.env` 文件中配置以下重要参数：
 
@@ -87,48 +121,84 @@ nano .env
   - `PRICE_SPREAD_THRESHOLD`: GRID_SPACING * 0.1 (价差阈值：网格间距的10%)
   - `PRICE_SPREAD_CHECK_INTERVAL`: 30秒 (价差检查间隔)
 
+### 多币种模式配置
+
+创建 `config/symbols.yaml` 文件配置多个币种：
+
+```yaml
+symbols:
+  - name: BTCUSDT
+    grid_spacing: 0.004
+    initial_quantity: 0.001
+    leverage: 20
+    contract_type: USDT
+    
+  - name: ETHUSDT
+    grid_spacing: 0.005
+    initial_quantity: 0.01
+    leverage: 20
+    contract_type: USDT
+```
+
+**配置参数说明**：
+- `name`: 交易对名称 (如 BTCUSDT, ETHUSDT)
+- `grid_spacing`: 网格间距 (0.001-0.01)
+- `initial_quantity`: 初始交易数量
+- `leverage`: 杠杆倍数 (1-100)
+- `contract_type`: 合约类型 (USDT/USDC)
+
 ## 🛠️ 管理命令
 
 ```bash
 # 查看帮助
-./deploy.sh help
+./scripts/deploy.sh help
 
-# 启动服务
-./deploy.sh start
+# 单币种模式
+./scripts/deploy.sh start          # 启动单币种服务
+./scripts/deploy.sh stop           # 停止服务
+./scripts/deploy.sh restart        # 重启服务
+./scripts/deploy.sh logs           # 查看容器日志
+./scripts/deploy.sh status         # 查看状态
 
-# 停止服务
-./deploy.sh stop
+# 多币种模式
+./scripts/deploy.sh multi-start    # 启动多币种服务
+./scripts/deploy.sh multi-logs     # 查看多币种汇总日志
+./scripts/deploy.sh bot-logs       # 查看币种详细日志
 
-# 重启服务
-./deploy.sh restart
-
-# 查看日志
-./deploy.sh logs
-
-# 查看状态
-./deploy.sh status
-
-# 构建镜像
-./deploy.sh build
-
-# 清理资源
-./deploy.sh cleanup
+# 通用命令
+./scripts/deploy.sh build          # 构建镜像
+./scripts/deploy.sh cleanup        # 清理资源
 ```
 
 ## 📊 监控和日志
 
 ### 查看实时日志
 ```bash
-./deploy.sh logs
+./scripts/deploy.sh logs
 ```
 
 ### 查看本地日志文件
+
+#### 单币种模式
 ```bash
 # Gate.io 版本
 tail -f log/grid_Gate.log
 
 # Binance 版本
 tail -f log/grid_BN.log
+```
+
+#### 多币种模式
+```bash
+# 主控制日志
+tail -f log/multi_grid_BN.log
+
+# 状态汇总日志
+tail -f log/status_summary.log
+
+# 特定币种日志
+tail -f log/grid_BN_BTCUSDT.log
+tail -f log/grid_BN_ETHUSDT.log
 ```
 
 ### 关键日志信息
@@ -179,16 +249,29 @@ tail -f log/grid_BN.log
 
 ```
 .
-├── Dockerfile              # Docker 镜像构建文件
-├── docker-compose.yml      # Docker Compose 配置
-├── deploy.sh               # 部署和管理脚本
-├── requirements.txt        # Python 依赖
-├── grid_Gate.py           # 主程序 (Gate.io)
-├── grid_BN.py             # 主程序 (Binance)
-├── grid_OK_XRP.py         # OKX 版本示例
-├── env.example            # 环境变量示例
-├── .dockerignore          # Docker 忽略文件
+├── config/                # 配置文件目录
+│   ├── symbols.yaml       # 多币种配置文件
+│   ├── symbols.json       # JSON格式配置文件
+│   └── env.example        # 环境变量示例
+├── scripts/               # 脚本文件目录
+│   ├── deploy.sh          # 部署和管理脚本
+│   ├── start.sh           # 启动脚本
+│   └── health_check.py    # 健康检查脚本
+├── docker/                # Docker相关文件
+│   ├── Dockerfile         # Docker镜像构建文件
+│   ├── docker-compose.yml # Docker Compose配置
+│   └── .dockerignore      # Docker忽略文件
+├── src/                   # 源代码目录
+│   ├── single_bot/        # 单币种机器人
+│   │   ├── binance_bot.py # 币安单币种版本
+│   │   └── gate_bot.py    # Gate.io单币种版本
+│   └── multi_bot/         # 多币种机器人
+│       ├── binance_multi_bot.py # 币安多币种版本
+│       └── multi_bot.py   # 多币种入口文件
+├── docs/                  # 文档目录
+├── legacy/                # 旧版本代码
 ├── log/                   # 日志目录 (持久化)
+├── requirements.txt        # Python 依赖
 └── README.md              # 说明文档
 ```
 
@@ -220,7 +303,7 @@ tail -f log/grid_BN.log
    grep API_KEY .env
    
    # 查看错误日志
-   ./deploy.sh logs
+   ./scripts/deploy.sh logs
    
    # 检查网络连接
    curl -I https://api.gateio.ws
@@ -262,25 +345,44 @@ tail -f log/grid_BN.log
 ### 日志级别
 
 机器人使用 Python logging 模块，日志级别为 INFO。日志同时输出到：
+
+#### 单币种模式
 - 控制台 (容器日志)
 - 文件 `log/grid_Gate.log` (Gate.io版本)
 - 文件 `log/grid_BN.log` (Binance版本)
 
+#### 多币种模式
+- 控制台 (容器日志)
+- 文件 `log/multi_grid_BN.log` (主控制日志)
+- 文件 `log/status_summary.log` (状态汇总日志)
+- 文件 `log/grid_BN_[币种].log` (各币种详细日志)
+
 ### 监控指标
+
+#### 单币种模式
 - **持仓状态**: 多头/空头持仓数量
 - **挂单状态**: 各类型挂单的数量和价格
 - **价差监控**: 买卖单价格差异百分比
 - **风险指标**: 持仓是否接近阈值
 - **系统状态**: WebSocket 连接状态和数据同步时间
 
+#### 多币种模式
+- **总体状态**: 所有币种的运行状态汇总
+- **币种状态**: 每个币种的持仓和挂单状态
+- **风险监控**: 各币种的风险指标
+- **性能指标**: 多币种并行处理的性能统计
+
 ## 🔮 版本支持
 
-本项目还包含其他交易所的版本：
+### 单币种模式
+- **Binance**: `src/single_bot/binance_bot.py` - 币安合约版本
+- **Gate.io**: `src/single_bot/gate_bot.py` - Gate.io合约版本
+- **OKX**: `legacy/grid_OK_XRP.py` - 欧易合约版本（旧版本）
 
-- **Binance**: `grid_BN.py` - 币安合约版本
-- **OKX**: `grid_OK_XRP.py` - 欧易合约版本
+### 多币种模式
+- **Binance**: `src/multi_bot/multi_bot.py` - 币安多币种版本
 
-每个版本都针对相应交易所的 API 特性进行了优化。
+每个版本都针对相应交易所的 API 特性进行了优化。多币种模式支持同时运行多个币种的网格交易策略。
 
 ## 📞 支持
 

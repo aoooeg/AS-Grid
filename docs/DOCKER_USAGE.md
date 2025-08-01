@@ -40,16 +40,16 @@ NOTIFICATION_INTERVAL=3600
 
 ```bash
 # 构建镜像
-docker-compose build
+docker-compose -f docker/docker-compose.yml -f docker/docker-compose -f docker/docker-compose.yml.yml build
 
 # 运行容器
-docker-compose up -d
+docker-compose -f docker/docker-compose.yml -f docker/docker-compose -f docker/docker-compose.yml.yml up -d
 
 # 查看日志
-docker-compose logs -f
+docker-compose -f docker/docker-compose.yml logs -f
 
 # 停止容器
-docker-compose down
+docker-compose -f docker/docker-compose.yml down
 ```
 
 #### 使用 Docker 命令
@@ -108,8 +108,8 @@ docker stop grid-trader
 ### 查看实时日志
 
 ```bash
-# 使用 docker-compose
-docker-compose logs -f
+# 使用 docker-compose -f docker/docker-compose.yml
+docker-compose -f docker/docker-compose.yml logs -f
 
 # 使用 docker
 docker logs -f grid-trader
@@ -133,7 +133,7 @@ tail -f log/grid_BN.log
 如果遇到权限问题，可以修改用户ID：
 
 ```bash
-# 在 docker-compose.yml 中修改
+# 在 docker-compose -f docker/docker-compose.yml.yml 中修改
 USER_ID: 1000
 GROUP_ID: 1000
 ```
@@ -168,7 +168,7 @@ docker exec grid-trader ping fapi.binance.com
 
 ### 资源限制
 
-在 `docker-compose.yml` 中可以调整资源限制：
+在 `docker-compose -f docker/docker-compose.yml.yml` 中可以调整资源限制：
 
 ```yaml
 deploy:

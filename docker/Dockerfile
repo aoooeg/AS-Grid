@@ -24,6 +24,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制项目文件
 COPY . .
 
+# 确保 src 目录存在
+RUN mkdir -p /app/src
+
 # 创建日志目录
 RUN mkdir -p /app/log
 
@@ -35,7 +38,7 @@ RUN groupadd -g ${GROUP_ID} trader && \
 
 # 设置权限（在切换到用户之前）
 RUN chown -R trader:trader /app && \
-    chmod +x /app/start.sh
+    chmod +x /app/scripts/start.sh
 
 # 切换到非 root 用户
 USER trader
@@ -48,4 +51,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import sys; sys.exit(0)"
 
 # 运行应用
-CMD ["/app/start.sh"] 
+CMD ["/app/scripts/start.sh"] 
