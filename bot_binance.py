@@ -134,6 +134,10 @@ class BinanceGridBot:
         self.short_threshold_alerted = False
         self.risk_reduction_alerted = False
         
+        # 双倍止盈止损通知状态跟踪
+        self.long_double_profit_alerted = False
+        self.short_double_profit_alerted = False
+        
         # 初始化异步锁
         self.lock = asyncio.Lock()
         
@@ -415,6 +419,66 @@ class BinanceGridBot:
 🟢 **库存风险控制已解除**
 """
         await self._send_telegram_message(message)
+
+    async def _check_and_notify_double_profit(self, side, position):
+        """检查并通知双倍止盈止损状态"""
+        is_over_limit = position > self.position_limit
+        
+        if side == 'long':
+            if is_over_limit and not self.long_double_profit_alerted:
+                await self._send_double_profit_alert(side, position)
+                self.long_double_profit_alerted = True
+            elif not is_over_limit and self.long_double_profit_alerted:
+                await self._send_double_profit_recovery(side, position)
+                self.long_double_profit_alerted = False
+                
+        elif side == 'short':
+            if is_over_limit and not self.short_double_profit_alerted:
+                await self._send_double_profit_alert(side, position)
+                self.short_double_profit_alerted = True
+            elif not is_over_limit and self.short_double_profit_alerted:
+                await self._send_double_profit_recovery(side, position)
+                self.short_double_profit_alerted = False
+    
+    async def _send_double_profit_alert(self, side, position):
+        """发送双倍止盈止损启用通知"""
+        message = f"""
+📈 **双倍止盈止损启用**
+
+📍 **{side.upper()}持仓超过监控阈值**
+• 当前{side}持仓: {position} 张
+• 监控阈值: {self.position_limit:.2f}
+• 最新价格: {self.latest_price:.8f}
+
+⚡ **已启用双倍止盈止损策略**
+• 止盈数量: {self.initial_quantity * 2} 张
+• 止损数量: {self.initial_quantity * 2} 张
+
+🔄 **策略说明**
+• 当持仓超过监控阈值时，系统自动启用双倍止盈止损
+• 加快持仓减少速度，降低风险敞口
+"""
+        await self._send_telegram_message(message, urgent=True)
+    
+    async def _send_double_profit_recovery(self, side, position):
+        """发送双倍止盈止损恢复正常通知"""
+        message = f"""
+✅ **双倍止盈止损已解除**
+
+📍 **{side.upper()}持仓已回落至安全区间**
+• 当前{side}持仓: {position} 张
+• 监控阈值: {self.position_limit:.2f}
+• 最新价格: {self.latest_price:.8f}
+
+🟢 **已恢复正常止盈止损策略**
+• 止盈数量: {self.initial_quantity} 张
+• 止损数量: {self.initial_quantity} 张
+
+📊 **策略说明**
+• 持仓已回落至监控阈值以下
+• 系统已切换回标准止盈止损策略
+"""
+        await self._send_telegram_message(message, urgent=False)
 
     async def _get_balance_info(self):
         """获取余额信息"""
@@ -944,6 +1008,8 @@ class BinanceGridBot:
         """核心网格交易循环"""
         await self._check_and_notify_position_threshold('long', self.long_position)
         await self._check_and_notify_position_threshold('short', self.short_position)
+        await self._check_and_notify_double_profit('long', self.long_position)
+        await self._check_and_notify_double_profit('short', self.short_position)
         await self._check_risk()
 
         current_time = time.time()
