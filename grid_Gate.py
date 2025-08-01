@@ -9,31 +9,91 @@ import ccxt
 import math
 from decimal import Decimal, ROUND_HALF_UP
 import os
+from dotenv import load_dotenv
+
+# Telegram 通知配置
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")  # Telegram Bot Token
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")  # Telegram Chat ID
+ENABLE_NOTIFICATIONS = os.getenv("ENABLE_NOTIFICATIONS", "true").lower() == "true"  # 是否启用通知
+NOTIFICATION_INTERVAL = int(os.getenv("NOTIFICATION_INTERVAL", "3600"))  # 定时汇总通知间隔（秒）
+
+import aiohttp  # 添加这个导入用于发送HTTP请求
+
+# 加载环境变量
+load_dotenv()
 
 # ==================== 配置 ====================
-API_KEY = ""  # 替换为你的 API Key
-API_SECRET = ""  # 替换为你的 API Secret
-COIN_NAME = "X"  # 交易币种
-GRID_SPACING = 0.004  # 网格间距 (0.3%)
-INITIAL_QUANTITY = 1  # 初始交易数量 (张数)
-LEVERAGE = 20  # 杠杆倍数
+# 从环境变量读取重要配置
+EXCHANGE = os.getenv("EXCHANGE", "gate")  # 交易所选择
+API_KEY = os.getenv("API_KEY", "")  # 从环境变量获取 API Key
+API_SECRET = os.getenv("API_SECRET", "")  # 从环境变量获取 API Secret
+COIN_NAME = os.getenv("COIN_NAME", "X")  # 交易币种
+GRID_SPACING = float(os.getenv("GRID_SPACING", "0.004"))  # 网格间距
+INITIAL_QUANTITY = int(os.getenv("INITIAL_QUANTITY", "1"))  # 初始交易数量 (张数)
+LEVERAGE = int(os.getenv("LEVERAGE", "20"))  # 杠杆倍数
+
+# 固定配置（通常不需要修改）
 WEBSOCKET_URL = "wss://fx-ws.gateio.ws/v4/ws/usdt"  # WebSocket URL
-POSITION_THRESHOLD = 60 * INITIAL_QUANTITY / GRID_SPACING * 2 / 100  # 锁仓阈值
-POSITION_LIMIT = 30 * INITIAL_QUANTITY / GRID_SPACING * 2 / 100  # 持仓数量阈值
+POSITION_THRESHOLD = 10 * INITIAL_QUANTITY / GRID_SPACING * 2 / 100  # 锁仓阈值
+POSITION_LIMIT = 5 * INITIAL_QUANTITY / GRID_SPACING * 2 / 100  # 持仓数量阈值
 ORDER_COOLDOWN_TIME = 60  # 锁仓后的反向挂单冷却时间（秒）
 SYNC_TIME = 3  # 同步时间（秒）
 ORDER_FIRST_TIME = 1  # 首单间隔时间
 
+
+# ==================== 配置验证 ====================
+def validate_config():
+    """验证配置参数"""
+    if not API_KEY or not API_SECRET:
+        raise ValueError("API_KEY 和 API_SECRET 必须设置")
+    
+    if GRID_SPACING <= 0 or GRID_SPACING >= 1:
+        raise ValueError("GRID_SPACING 必须在 0 到 1 之间")
+    
+    if INITIAL_QUANTITY <= 0:
+        raise ValueError("INITIAL_QUANTITY 必须大于 0")
+    
+    if LEVERAGE <= 0 or LEVERAGE > 100:
+        raise ValueError("LEVERAGE 必须在 1 到 100 之间")
+    
+    # 验证Telegram配置
+    global ENABLE_NOTIFICATIONS
+    if ENABLE_NOTIFICATIONS:
+        if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+            logger.warning("Telegram通知已启用但缺少BOT_TOKEN或CHAT_ID，将禁用通知功能")
+            ENABLE_NOTIFICATIONS = False
+        else:
+            logger.info("Telegram通知功能已启用")
+    
+    logger.info(f"配置验证通过 - 币种: {COIN_NAME}, 网格间距: {GRID_SPACING}, 初始数量: {INITIAL_QUANTITY}")
+
 # ==================== 日志配置 ====================
+# 确保日志目录存在
+os.makedirs("log", exist_ok=True)
+
 # 获取当前脚本的文件名（不带扩展名）
 script_name = os.path.splitext(os.path.basename(__file__))[0]
+
+# 配置日志处理器
+handlers = [logging.StreamHandler()]  # 总是包含控制台输出
+
+# 尝试添加文件处理器
+try:
+    file_handler = logging.FileHandler(f"log/{script_name}.log")
+    handlers.append(file_handler)
+    print(f"日志将写入文件: log/{script_name}.log")
+except PermissionError as e:
+    print(f"警告: 无法创建日志文件 (权限不足): {e}")
+    print("日志将只输出到控制台")
+except Exception as e:
+    print(f"警告: 无法创建日志文件: {e}")
+    print("日志将只输出到控制台")
+
+# 配置日志
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(f"log/{script_name}.log"),  # 日志文件
-        logging.StreamHandler(),  # 控制台输出
-    ],
+    handlers=handlers,
 )
 logger = logging.getLogger()
 
@@ -84,6 +144,18 @@ class GridTradingBot:
         self.mid_price_short = 0  # short 中间价
         self.lower_price_short = 0  # short 网格上
         self.upper_price_short = 0  # short 网格下
+        
+
+        
+        # Telegram通知相关变量
+        self.last_summary_time = 0  # 上次汇总通知时间
+        self.startup_notified = False  # 是否已发送启动通知
+        self.last_balance = None  # 上次余额记录
+        
+        # 紧急通知状态跟踪
+        self.long_threshold_alerted = False  # 多头阈值警告状态
+        self.short_threshold_alerted = False  # 空头阈值警告状态
+        self.risk_reduction_alerted = False  # 风险减仓警告状态
 
     def _initialize_exchange(self):
         """初始化交易所 API"""
@@ -101,6 +173,237 @@ class GridTradingBot:
         markets = self.exchange.fetch_markets()
         symbol_info = next(market for market in markets if market["symbol"] == self.ccxt_symbol)
         return int(-math.log10(float(symbol_info["precision"]["price"])))
+
+    # ==================== Telegram 通知功能 ====================
+    async def send_telegram_message(self, message, urgent=False, silent=False):
+        """发送Telegram消息"""
+        if not ENABLE_NOTIFICATIONS or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+            return
+
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+            
+            # 添加机器人标识和时间戳
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            formatted_message = f"🤖 **{COIN_NAME}网格机器人** | {timestamp}\n\n{message}"
+            
+            # 如果是紧急消息，添加特殊标记
+            if urgent:
+                formatted_message = f"🚨 **紧急通知** 🚨\n\n{formatted_message}"
+            elif silent:
+                formatted_message = f"🔇 **定时汇总** 🔇\n\n{formatted_message}"
+            
+            data = {
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": formatted_message,
+                "parse_mode": "Markdown",
+                "disable_web_page_preview": True,
+                "disable_notification": silent  # 静音发送参数
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=data) as response:
+                    if response.status == 200:
+                        notification_type = "静音" if silent else ("紧急" if urgent else "正常")
+                    else:
+                        logger.warning(f"Telegram消息发送失败: {response.status}")
+                        
+        except Exception as e:
+            logger.error(f"发送Telegram消息失败: {e}")
+
+    async def send_startup_notification(self):
+        """发送启动通知"""
+        if self.startup_notified:
+            return
+            
+        message = f"""
+🚀 **机器人启动成功**
+
+📊 **交易配置**
+• 币种: {COIN_NAME}
+• 网格间距: {GRID_SPACING:.2%}
+• 初始数量: {INITIAL_QUANTITY} 张
+• 杠杆倍数: {LEVERAGE}x
+
+🛡️ **风险控制**
+• 锁仓阈值: {POSITION_THRESHOLD:.2f}
+• 持仓监控阈值: {POSITION_LIMIT:.2f}
+
+✅ 机器人已开始运行，将自动进行网格交易...
+"""
+        await self.send_telegram_message(message)
+        self.startup_notified = True
+
+    async def check_and_notify_position_threshold(self, side, position):
+        """检查并通知持仓阈值状态"""
+        is_over_threshold = position > POSITION_THRESHOLD
+        
+        if side == 'long':
+            if is_over_threshold and not self.long_threshold_alerted:
+                # 首次超过阈值，发送警告
+                await self._send_threshold_alert(side, position)
+                self.long_threshold_alerted = True
+            elif not is_over_threshold and self.long_threshold_alerted:
+                # 恢复正常，发送恢复通知
+                await self._send_threshold_recovery(side, position)
+                self.long_threshold_alerted = False
+                
+        elif side == 'short':
+            if is_over_threshold and not self.short_threshold_alerted:
+                # 首次超过阈值，发送警告
+                await self._send_threshold_alert(side, position)
+                self.short_threshold_alerted = True
+            elif not is_over_threshold and self.short_threshold_alerted:
+                # 恢复正常，发送恢复通知
+                await self._send_threshold_recovery(side, position)
+                self.short_threshold_alerted = False
+    
+    async def _send_threshold_alert(self, side, position):
+        """发送持仓超过阈值警告"""
+        message = f"""
+⚠️ **持仓风险警告**
+
+📍 **{side.upper()}持仓超过极限阈值**
+• 当前{side}持仓: {position} 张
+• 极限阈值: {POSITION_THRESHOLD:.2f}
+• 最新价格: {self.latest_price:.8f}
+
+🛑 **已暂停新开仓，等待持仓回落**
+"""
+        await self.send_telegram_message(message, urgent=True)
+    
+    async def _send_threshold_recovery(self, side, position):
+        """发送持仓恢复正常通知"""
+        message = f"""
+✅ **持仓风险解除**
+
+📍 **{side.upper()}持仓已回落至安全区间**
+• 当前{side}持仓: {position} 张
+• 极限阈值: {POSITION_THRESHOLD:.2f}
+• 最新价格: {self.latest_price:.8f}
+
+🟢 **已恢复正常开仓策略**
+"""
+        await self.send_telegram_message(message, urgent=False)
+
+
+
+    async def check_and_notify_risk_reduction(self):
+        """检查并通知风险减仓状态"""
+        local_position_threshold = int(POSITION_THRESHOLD * 0.8)
+        both_over_threshold = (self.long_position >= local_position_threshold and 
+                              self.short_position >= local_position_threshold)
+        
+        if both_over_threshold and not self.risk_reduction_alerted:
+            # 首次双向超过阈值，发送警告
+            await self._send_risk_reduction_alert()
+            self.risk_reduction_alerted = True
+        elif not both_over_threshold and self.risk_reduction_alerted:
+            # 恢复正常，发送恢复通知
+            await self._send_risk_reduction_recovery()
+            self.risk_reduction_alerted = False
+    
+    async def _send_risk_reduction_alert(self):
+        """发送风险减仓通知"""
+        message = f"""
+📉 **库存风险控制**
+
+⚖️ **双向持仓均超过阈值，执行风险减仓**
+• 多头持仓: {self.long_position}
+• 空头持仓: {self.short_position}
+• 阈值: {int(POSITION_THRESHOLD * 0.8)}
+
+✅ 已执行部分平仓减少库存风险
+"""
+        await self.send_telegram_message(message)
+    
+    async def _send_risk_reduction_recovery(self):
+        """发送风险减仓恢复通知"""
+        message = f"""
+✅ **库存风险已缓解**
+
+⚖️ **持仓状况已改善**
+• 多头持仓: {self.long_position}
+• 空头持仓: {self.short_position}
+• 监控阈值: {int(POSITION_THRESHOLD * 0.8)}
+
+🟢 **库存风险控制已解除**
+"""
+        await self.send_telegram_message(message)
+
+    async def get_balance_info(self):
+        """获取余额信息"""
+        # 首先尝试使用WebSocket数据
+        if "USDT" in self.balance and self.balance["USDT"]:
+            balance_amount = self.balance["USDT"].get("balance", 0)
+            balance_change = self.balance["USDT"].get("change", 0)
+            if balance_amount > 0:
+                balance_info = f"• USDT余额: {balance_amount:.2f}"
+                if balance_change != 0:
+                    balance_info += f" (变化: {balance_change:+.2f})"
+                return balance_info
+        
+        # 如果WebSocket数据不可用，使用REST API获取
+        try:
+            balance = self.exchange.fetch_balance()
+            if 'USDT' in balance:
+                usdt_balance = balance['USDT']
+                total = usdt_balance.get('total', 0)
+                if total > 0:
+                    return f"• USDT余额: {total:.2f} (REST)"
+        except Exception as e:
+            logger.warning(f"获取REST余额失败: {e}")
+        
+        return "• USDT余额: 数据获取中..."
+
+    async def send_summary_notification(self):
+        """发送定时汇总通知（静音）"""
+        current_time = time.time()
+        if current_time - self.last_summary_time < NOTIFICATION_INTERVAL:
+            return
+            
+        # 获取当前余额
+        balance_info = await self.get_balance_info()
+        
+        message = f"""
+📊 **运行状态汇总**
+
+💰 **账户信息**
+{balance_info}
+
+📈 **持仓情况**
+• 多头持仓: {self.long_position} 张
+• 空头持仓: {self.short_position} 张
+
+📋 **挂单状态**
+• 多头开仓: {self.buy_long_orders} 张
+• 多头止盈: {self.sell_long_orders} 张
+• 空头开仓: {self.sell_short_orders} 张
+• 空头止盈: {self.buy_short_orders} 张
+
+💹 **价格信息**
+• 最新价格: {self.latest_price:.8f}
+• 最佳买价: {self.best_bid_price:.8f}
+• 最佳卖价: {self.best_ask_price:.8f}
+
+🏃‍♂️ 机器人运行正常...
+"""
+        await self.send_telegram_message(message, urgent=False, silent=True)  # 静音发送
+        self.last_summary_time = current_time
+
+    async def send_error_notification(self, error_msg, error_type="运行错误"):
+        """发送错误通知"""
+        message = f"""
+❌ **{error_type}**
+
+🔍 **错误详情**
+{error_msg}
+
+⏰ **发生时间**: {time.strftime("%Y-%m-%d %H:%M:%S")}
+
+请检查机器人状态...
+"""
+        await self.send_telegram_message(message, urgent=True)
 
     def get_position(self):
         """获取当前持仓"""
@@ -211,6 +514,9 @@ class GridTradingBot:
         logger.info(
             f"初始化挂单状态: 多头开仓={self.buy_long_orders}, 多头止盈={self.sell_long_orders}, 空头开仓={self.sell_short_orders}, 空头止盈={self.buy_short_orders}")
 
+        # 发送启动通知
+        await self.send_startup_notification()
+
         # 启动挂单监控任务
         # asyncio.create_task(self.monitor_orders())
 
@@ -219,6 +525,7 @@ class GridTradingBot:
                 await self.connect_websocket()
             except Exception as e:
                 logger.error(f"WebSocket 连接失败: {e}")
+                await self.send_error_notification(str(e), "WebSocket连接失败")
                 await asyncio.sleep(5)  # 等待 5 秒后重试
 
     async def connect_websocket(self):
@@ -233,6 +540,11 @@ class GridTradingBot:
                 try:
                     message = await websocket.recv()
                     data = json.loads(message)
+                    
+                    # 添加调试信息，记录所有收到的channel类型
+                    channel = data.get("channel", "unknown")
+                    event = data.get("event", "unknown")
+                    
                     if data.get("channel") == "futures.tickers":
                         await self.handle_ticker_update(message)
                     elif data.get("channel") == "futures.positions":
@@ -243,6 +555,14 @@ class GridTradingBot:
                         await self.handle_book_ticker_update(message)
                     elif data.get("channel") == "futures.balances":  # 处理余额更新
                         await self.handle_balance_update(message)
+                    else:
+                        # 记录未处理的消息类型（只记录前几次避免日志过多）
+                        if not hasattr(self, '_unknown_channels'):
+                            self._unknown_channels = set()
+                        if channel not in self._unknown_channels and len(self._unknown_channels) < 5:
+                            logger.debug(f"收到未处理的消息类型: channel={channel}, event={event}")
+                            self._unknown_channels.add(channel)
+                            
                 except Exception as e:
                     logger.error(f"WebSocket 消息处理失败: {e}")
                     break
@@ -256,7 +576,7 @@ class GridTradingBot:
             "time": current_time,
             "channel": "futures.balances",
             "event": "subscribe",
-            "payload": ["USDT"],  # 订阅 USDT 余额
+            "payload": [],  # 订阅所有余额，空数组表示订阅所有
             "auth": {
                 "method": "api_key",
                 "KEY": self.api_key,
@@ -325,32 +645,45 @@ class GridTradingBot:
 
     async def handle_balance_update(self, message):
         """处理余额更新"""
-        data = json.loads(message)
-        if data.get("channel") == "futures.balances" and data.get("event") == "update":
-            balances = data.get("result", [])
-            for balance in balances:
-                currency = balance.get("currency", "UNKNOWN")  # 币种，默认值为 "UNKNOWN"
-                balance_amount = float(balance.get("balance", 0))  # 余额最终数量，默认值为 0
-                change = float(balance.get("change", 0))  # 余额变化数量，默认值为 0
-                text = balance.get("text", "")  # 附带信息，默认值为空字符串
-                balance_time = balance.get("time", 0)  # 时间（秒），默认值为 0
-                balance_time_ms = balance.get("time_ms", 0)  # 时间（毫秒），默认值为 0
-                balance_type = balance.get("type", "UNKNOWN")  # 类型，默认值为 "UNKNOWN"
-                user = balance.get("user", "UNKNOWN")  # 用户 ID，默认值为 "UNKNOWN"
+        try:
+            data = json.loads(message)
+            if data.get("channel") == "futures.balances" and data.get("event") == "update":
+                balances = data.get("result", [])
+                if not balances:
+                    logger.debug("收到空的余额更新数据")
+                    return
+                    
+                for balance in balances:
+                    currency = balance.get("currency", "UNKNOWN")  # 币种，默认值为 "UNKNOWN"
+                    balance_amount = float(balance.get("balance", 0))  # 余额最终数量，默认值为 0
+                    change = float(balance.get("change", 0))  # 余额变化数量，默认值为 0
+                    text = balance.get("text", "")  # 附带信息，默认值为空字符串
+                    balance_time = balance.get("time", 0)  # 时间（秒），默认值为 0
+                    balance_time_ms = balance.get("time_ms", 0)  # 时间（毫秒），默认值为 0
+                    balance_type = balance.get("type", "UNKNOWN")  # 类型，默认值为 "UNKNOWN"
+                    user = balance.get("user", "UNKNOWN")  # 用户 ID，默认值为 "UNKNOWN"
 
-                # 更新余额数据
-                self.balance[currency] = {
-                    "balance": balance_amount,
-                    "change": change,
-                    "text": text,
-                    "time": balance_time,
-                    "time_ms": balance_time_ms,
-                    "type": balance_type,
-                    "user": user,
-                }
-                print(
-                    f"余额更新: 币种={currency}, 余额={balance_amount}, 变化={change}"
-                )
+                    # 更新余额数据（统一转换为大写格式以便查找）
+                    currency_upper = currency.upper()
+                    self.balance[currency_upper] = {
+                        "balance": balance_amount,
+                        "change": change,
+                        "text": text,
+                        "time": balance_time,
+                        "time_ms": balance_time_ms,
+                        "type": balance_type,
+                        "user": user,
+                    }
+                    # 也保留原始格式以防需要
+                    if currency != currency_upper:
+                        self.balance[currency] = self.balance[currency_upper]
+                    logger.info(
+                        f"余额更新: 币种={currency}, 余额={balance_amount}, 变化={change}"
+                    )
+            else:
+                logger.debug(f"忽略非余额更新消息: channel={data.get('channel')}, event={data.get('event')}")
+        except Exception as e:
+            logger.error(f"处理余额更新失败: {e}, 消息: {message}")
 
 
     async def subscribe_positions(self, websocket):
@@ -396,6 +729,9 @@ class GridTradingBot:
                 print(f"同步 orders: 多头买单 {self.buy_long_orders} 张, 多头卖单 {self.sell_long_orders} 张,空头卖单 {self.sell_short_orders} 张, 空头买单 {self.buy_short_orders} 张 @ ticker")
 
             await self.adjust_grid_strategy()
+            
+            # 发送定时汇总通知
+            await self.send_summary_notification()
 
     async def handle_book_ticker_update(self, message):
         """处理 book_ticker 更新"""
@@ -615,6 +951,8 @@ class GridTradingBot:
                 # 检查持仓是否超过阈值
                 if self.long_position > POSITION_THRESHOLD:
                     print(f"持仓{self.long_position}超过极限阈值 {POSITION_THRESHOLD}，long装死")
+                    # 检查并发送持仓阈值通知
+                    await self.check_and_notify_position_threshold('long', self.long_position)
                     # print('多头止盈单', self.sell_long_orders)
                     if self.sell_long_orders <= 0:
                         r = float((int(self.long_position / self.short_position) / 100) + 1)
@@ -642,6 +980,8 @@ class GridTradingBot:
                 # 检查持仓是否超过阈值
                 if self.short_position > POSITION_THRESHOLD:
                     print(f"持仓{self.short_position}超过极限阈值 {POSITION_THRESHOLD}，short 装死")
+                    # 检查并发送持仓阈值通知
+                    await self.check_and_notify_position_threshold('short', self.short_position)
                     if self.buy_short_orders <= 0:
                         r = float((int(self.short_position / self.long_position) / 100) + 1)
                         logger.info("发现多头止盈单缺失。。需要补止盈单")
@@ -661,15 +1001,19 @@ class GridTradingBot:
         except Exception as e:
             logger.error(f"挂空头订单失败: {e}")
 
-    def check_and_reduce_positions(self):
+    async def check_and_reduce_positions(self):
         """检查持仓并减少库存风险"""
 
-        # 设置持仓阈值
+        # 设置持仓阈值（保持原逻辑）
         local_position_threshold = int(POSITION_THRESHOLD * 0.8)  # 阈值的 80%
 
-        # 设置平仓数量
+        # 设置平仓数量（保持原逻辑）
         REDUCE_QUANTITY = int(POSITION_THRESHOLD * 0.1)  # 阈值的 10%
 
+        # 检查并通知风险减仓状态（新增通知逻辑）
+        await self.check_and_notify_risk_reduction()
+
+        # 保持原本的判断和执行逻辑
         if self.long_position >= local_position_threshold and self.short_position >= local_position_threshold:
             logger.info(f"多头和空头持仓均超过阈值 {local_position_threshold}，开始双向平仓，减少库存风险")
 
@@ -700,11 +1044,17 @@ class GridTradingBot:
             print("更新 short 中间价")
 
 
-    # ==================== 策略逻辑 ====================
+
     async def adjust_grid_strategy(self):
         """根据最新价格和持仓调整网格策略"""
+        # 检查持仓阈值状态并发送通知
+        await self.check_and_notify_position_threshold('long', self.long_position)
+        await self.check_and_notify_position_threshold('short', self.short_position)
+        
         # 检查双向仓位库存，如果同时达到，就统一部分平仓减少库存风险，提高保证金使用率
-        self.check_and_reduce_positions()
+        await self.check_and_reduce_positions()
+        
+
 
         # # order推流不准没解决，rest请求确认下
         # if (self.buy_long_orders != INITIAL_QUANTITY or self.sell_long_orders != INITIAL_QUANTITY or self.sell_short_orders != INITIAL_QUANTITY or self.buy_short_orders != INITIAL_QUANTITY):
@@ -738,8 +1088,32 @@ class GridTradingBot:
 
 # ==================== 主程序 ====================
 async def main():
-    bot = GridTradingBot(API_KEY, API_SECRET, COIN_NAME, GRID_SPACING, INITIAL_QUANTITY, LEVERAGE)
-    await bot.run()
+    try:
+        # 验证配置
+        validate_config()
+        
+        # 创建并启动交易机器人
+        bot = GridTradingBot(API_KEY, API_SECRET, COIN_NAME, GRID_SPACING, INITIAL_QUANTITY, LEVERAGE)
+        logger.info("网格交易机器人启动中...")
+        await bot.run()
+        
+    except ValueError as e:
+        logger.error(f"配置错误: {e}")
+        # 发送配置错误通知
+        bot = GridTradingBot(API_KEY, API_SECRET, COIN_NAME, GRID_SPACING, INITIAL_QUANTITY, LEVERAGE)
+        await bot.send_error_notification(str(e), "配置错误")
+        exit(1)
+    except KeyboardInterrupt:
+        logger.info("收到停止信号，正在关闭机器人...")
+        # 发送停止通知
+        if 'bot' in locals():
+            await bot.send_telegram_message("🛑 **机器人已手动停止**\n\n用户主动停止了网格交易机器人", urgent=False, silent=True)
+    except Exception as e:
+        logger.error(f"运行时错误: {e}")
+        # 发送运行错误通知
+        if 'bot' in locals():
+            await bot.send_error_notification(str(e), "运行时错误")
+        exit(1)
 
 if __name__ == "__main__":
     asyncio.run(main())

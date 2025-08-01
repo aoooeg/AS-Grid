@@ -1,0 +1,67 @@
+services:
+  grid-trader:
+    build: 
+      context: .
+      args:
+        USER_ID: 1000
+        GROUP_ID: 1000
+    image: grid-trading-bot:latest
+    container_name: grid-trader
+    restart: unless-stopped
+    
+    # 环境变量 - 建议使用 .env 文件
+    environment:
+      - EXCHANGE=${EXCHANGE:-gate}
+      - CONTRACT_TYPE=${CONTRACT_TYPE:-USDT}
+      - API_KEY=${API_KEY}
+      - API_SECRET=${API_SECRET}
+      - COIN_NAME=${COIN_NAME:-X}
+      - GRID_SPACING=${GRID_SPACING:-0.004}
+      - INITIAL_QUANTITY=${INITIAL_QUANTITY:-1}
+      - LEVERAGE=${LEVERAGE:-20}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - ENABLE_NOTIFICATIONS=${ENABLE_NOTIFICATIONS:-true}
+      - NOTIFICATION_INTERVAL=${NOTIFICATION_INTERVAL:-3600}
+    
+    # 挂载卷 - 持久化日志
+    volumes:
+      - ./log:/app/log
+      - ./config:/app/config:ro  # 只读配置目录
+    
+    # 网络配置
+    networks:
+      - trader-network
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  trader-network:
+    driver: bridge
+
+volumes:
+  log-data:
+    driver: local 
