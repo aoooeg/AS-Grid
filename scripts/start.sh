@@ -171,7 +171,14 @@ stop_bot() {
 }
 
 # 主逻辑
-case "${1:-single}" in
+# 检查环境变量决定运行模式
+if [ "$GRID_MODE" = "multi" ]; then
+    DEFAULT_MODE="multi"
+else
+    DEFAULT_MODE="single"
+fi
+
+case "${1:-$DEFAULT_MODE}" in
     "single")
         check_requirements
         start_single_bot

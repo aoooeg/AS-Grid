@@ -56,7 +56,7 @@ create_directories() {
 
 build_image() {
     print_info "构建 Docker 镜像..."
-    docker build -t $IMAGE_NAME .
+    docker build -t $IMAGE_NAME -f docker/Dockerfile .
     print_success "Docker 镜像构建完成"
 }
 
@@ -70,10 +70,10 @@ start_container() {
     
     if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
         print_warning "容器已在运行，正在重启..."
-        docker-compose -f docker/docker-compose.yml restart
+        docker-compose -f docker/docker-compose.yml --env-file config/.env restart
     else
         print_info "启动网格交易机器人..."
-        docker-compose -f docker/docker-compose.yml up -d
+        docker-compose -f docker/docker-compose.yml --env-file config/.env up -d
     fi
     
     print_success "网格交易机器人已启动"
@@ -82,24 +82,33 @@ start_container() {
 
 stop_container() {
     print_info "停止网格交易机器人..."
-    docker-compose -f docker/docker-compose.yml down
+    docker-compose -f docker/docker-compose.yml --env-file config/.env down
     print_success "网格交易机器人已停止"
 }
 
 restart_container() {
     print_info "重启网格交易机器人..."
-    docker-compose -f docker/docker-compose.yml restart
+    docker-compose -f docker/docker-compose.yml --env-file config/.env restart
     print_success "网格交易机器人已重启"
 }
 
 show_logs() {
     print_info "显示容器日志..."
-    docker-compose -f docker/docker-compose.yml logs -f --tail=100
+    if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
+        docker logs -f --tail=100 $CONTAINER_NAME
+    else
+        print_warning "容器未运行"
+        docker-compose -f docker/docker-compose.yml --env-file config/.env logs -f --tail=100
+    fi
 }
 
 show_status() {
     print_info "容器状态:"
-    docker-compose -f docker/docker-compose.yml ps
+    if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
+        docker ps --filter name=$CONTAINER_NAME --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+    else
+        docker-compose -f docker/docker-compose.yml --env-file config/.env ps
+    fi
     echo
     
     if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
@@ -134,12 +143,12 @@ start_multi_container() {
     
     if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
         print_warning "容器已在运行，正在重启..."
-        docker-compose -f docker/docker-compose.yml restart
+        docker-compose -f docker/docker-compose.yml --env-file config/.env restart
     else
         print_info "启动多币种网格交易机器人..."
         # 设置环境变量指示使用多币种模式
         export GRID_MODE="multi"
-        docker-compose -f docker/docker-compose.yml up -d
+        docker-compose -f docker/docker-compose.yml --env-file config/.env up -d
     fi
     
     print_success "多币种网格交易机器人已启动"

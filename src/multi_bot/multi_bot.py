@@ -9,7 +9,10 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
-from .binance_multi_bot import BinanceGridBot
+import sys
+import os
+sys.path.append(os.path.dirname(__file__))
+from binance_multi_bot import BinanceGridBot
 
 # 加载环境变量
 load_dotenv()
@@ -201,10 +204,51 @@ def run_single_bot(symbol_config, api_key, api_secret):
         # 存储机器人实例（用于停止）
         running_bots[symbol] = bot
         
-        # 运行机器人
-        asyncio.run(bot.start())
+        # 在新线程中创建事件循环并运行机器人
+        def run_bot_with_loop():
+            try:
+                # 创建新的事件循环
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # 运行机器人
+                loop.run_until_complete(bot.start())
+            except Exception as e:
+                logger.error(f"机器人运行异常: {e}")
+            finally:
+                try:
+                    loop.close()
+                except:
+                    pass
         
-        return symbol, True, None
+        # 在新线程中运行
+        import threading
+        bot_thread = threading.Thread(target=run_bot_with_loop, name=f"bot-{symbol}")
+        bot_thread.daemon = True
+        bot_thread.start()
+        
+        # 等待一小段时间确保线程启动
+        import time
+        time.sleep(0.1)
+        
+        # 等待机器人真正启动
+        max_wait_time = 30  # 最多等待30秒
+        wait_time = 0
+        while wait_time < max_wait_time:
+            if symbol in running_bots:
+                # 检查机器人是否真正运行
+                bot = running_bots[symbol]
+                if hasattr(bot, 'running') and bot.running:
+                    logger.info(f"{symbol} 机器人已添加到运行列表")
+                    return symbol, True, None
+            time.sleep(1)
+            wait_time += 1
+        
+        # 如果超时，从运行列表中移除
+        if symbol in running_bots:
+            del running_bots[symbol]
+        
+        return symbol, False, "机器人启动超时"
         
     except Exception as e:
         error_msg = f"启动 {symbol} 机器人失败: {str(e)}"
@@ -295,37 +339,49 @@ def main():
     status_thread = threading.Thread(target=print_status, daemon=True)
     status_thread.start()
     
-    # 使用线程池运行所有机器人
-    with ThreadPoolExecutor(max_workers=len(symbols)) as executor:
-        # 提交所有任务
-        future_to_symbol = {}
-        for symbol_config in symbols:
-            future = executor.submit(run_single_bot, symbol_config, api_key, api_secret)
-            future_to_symbol[future] = symbol_config['name']
+    # 直接运行所有机器人，不使用线程池
+    bot_threads = {}
+    for symbol_config in symbols:
+        symbol = symbol_config['name']
+        main_logger.info(f"启动 {symbol} 网格机器人")
         
-        # 等待任务完成
-        try:
-            for future in as_completed(future_to_symbol):
-                symbol = future_to_symbol[future]
-                try:
-                    symbol_name, success, error_msg = future.result()
-                    if success:
-                        main_logger.info(f"{symbol_name} 机器人启动成功")
-                    else:
-                        main_logger.error(f"{symbol_name} 机器人启动失败: {error_msg}")
-                except Exception as e:
-                    main_logger.error(f"{symbol_name} 机器人运行异常: {e}")
-        except KeyboardInterrupt:
-            main_logger.info("收到中断信号，正在停止所有机器人...")
-            stop_event.set()
+        # 创建机器人线程
+        bot_thread = threading.Thread(
+            target=run_single_bot, 
+            args=(symbol_config, api_key, api_secret),
+            name=f"bot-{symbol}",
+            daemon=True
+        )
+        bot_thread.start()
+        bot_threads[symbol] = bot_thread
+    
+    # 等待所有机器人启动完成
+    main_logger.info("等待所有机器人启动完成...")
+    for symbol, thread in bot_threads.items():
+        thread.join(timeout=60)  # 最多等待60秒
+    
+    # 主循环：监控机器人状态
+    try:
+        while not stop_event.is_set():
+            active_bots = len(running_bots)
+            if active_bots > 0:
+                symbols = list(running_bots.keys())
+                main_logger.info(f"当前活跃机器人: {active_bots} 个 - {', '.join(symbols)}")
+            else:
+                main_logger.info("当前没有活跃的机器人")
             
-            # 停止所有机器人
-            for symbol, bot in running_bots.items():
-                try:
-                    bot.stop()
-                    main_logger.info(f"已停止 {symbol} 机器人")
-                except Exception as e:
-                    main_logger.error(f"停止 {symbol} 机器人失败: {e}")
+            time.sleep(30)  # 每30秒检查一次状态
+    except KeyboardInterrupt:
+        main_logger.info("收到中断信号，正在停止所有机器人...")
+        stop_event.set()
+        
+        # 停止所有机器人
+        for symbol, bot in running_bots.items():
+            try:
+                bot.stop()
+                main_logger.info(f"已停止 {symbol} 机器人")
+            except Exception as e:
+                main_logger.error(f"停止 {symbol} 机器人失败: {e}")
 
 if __name__ == "__main__":
     main() 

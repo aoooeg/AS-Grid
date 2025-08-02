@@ -1,7 +1,8 @@
 services:
   grid-trader:
     build: 
-      context: .
+      context: ..
+      dockerfile: docker/Dockerfile
       args:
         USER_ID: 1000
         GROUP_ID: 1000
@@ -9,28 +10,27 @@ services:
     container_name: grid-trader
     restart: unless-stopped
     
-    # 环境变量 - 建议使用 .env 文件
+    # 环境变量 - 使用 .env 文件
+    env_file:
+      - ../config/.env
     environment:
       - EXCHANGE=${EXCHANGE:-gate}
       - CONTRACT_TYPE=${CONTRACT_TYPE:-USDT}
-      - API_KEY=${API_KEY}
-      - API_SECRET=${API_SECRET}
       - COIN_NAME=${COIN_NAME:-X}
       - GRID_SPACING=${GRID_SPACING:-0.004}
       - INITIAL_QUANTITY=${INITIAL_QUANTITY:-1}
       - LEVERAGE=${LEVERAGE:-20}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - ENABLE_NOTIFICATIONS=${ENABLE_NOTIFICATIONS:-true}
       - NOTIFICATION_INTERVAL=${NOTIFICATION_INTERVAL:-3600}
+      - GRID_MODE=${GRID_MODE:-single}
     
     # 挂载卷 - 持久化日志和配置
     volumes:
-      - ./log:/app/log
-      - ./config:/app/config:ro  # 只读配置目录
-      - ./config/.env:/app/.env:ro  # 环境变量文件
-      - ./config/symbols.yaml:/app/config/symbols.yaml:ro  # 多币种配置文件
-      - ./config/symbols.json:/app/config/symbols.json:ro  # 多币种配置文件（可选）
+      - ../log:/app/log
+      - ../config:/app/config:ro  # 只读配置目录
+      - ../config/.env:/app/.env:ro  # 环境变量文件
+      - ../config/symbols.yaml:/app/config/symbols.yaml:ro  # 多币种配置文件
+      - ../config/symbols.json:/app/config/symbols.json:ro  # 多币种配置文件（可选）
     
     # 网络配置
     networks:

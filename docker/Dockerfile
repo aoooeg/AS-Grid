@@ -48,7 +48,7 @@ EXPOSE 8080
 
 # 设置健康检查（检查进程是否运行）
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import sys; sys.exit(0)"
+    CMD python /app/scripts/health_check.py
 
 # 运行应用
 CMD ["/app/scripts/start.sh"] 

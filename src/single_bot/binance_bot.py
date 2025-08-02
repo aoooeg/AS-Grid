@@ -2,7 +2,10 @@ import asyncio
 import os
 import logging
 from dotenv import load_dotenv
-from bot_binance import BinanceGridBot
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'multi_bot'))
+from binance_multi_bot import BinanceGridBot
 
 # 加载环境变量
 load_dotenv()

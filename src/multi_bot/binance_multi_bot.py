@@ -29,13 +29,29 @@ ORDER_FIRST_TIME = 1
 
 # 日志配置
 os.makedirs("log", exist_ok=True)
-script_name = os.path.splitext(os.path.basename(__file__))[0]
+
+# 检查是否从单币种脚本调用
+import inspect
+import sys
+
+# 遍历调用栈，查找调用者
+log_filename = None
+for frame_info in inspect.stack():
+    frame = frame_info.frame
+    filename = frame.f_globals.get('__file__', '')
+    if filename and 'single_bot' in filename and 'binance_bot.py' in filename:
+        log_filename = "binance_single_bot.log"
+        break
+
+if not log_filename:
+    script_name = os.path.splitext(os.path.basename(__file__))[0]
+    log_filename = f"{script_name}.log"
 
 handlers = [logging.StreamHandler()]
 try:
-    file_handler = logging.FileHandler(f"log/{script_name}.log")
+    file_handler = logging.FileHandler(f"log/{log_filename}")
     handlers.append(file_handler)
-    print(f"日志将写入文件: log/{script_name}.log")
+    print(f"日志将写入文件: log/{log_filename}")
 except PermissionError as e:
     print(f"警告: 无法创建日志文件 (权限不足): {e}")
     print("日志将只输出到控制台")
@@ -138,8 +154,8 @@ class BinanceGridBot:
         self.long_double_profit_alerted = False
         self.short_double_profit_alerted = False
         
-        # 初始化异步锁
-        self.lock = asyncio.Lock()
+        # 初始化异步锁（延迟创建，避免在没有事件循环时创建）
+        self.lock = None
         
         # 运行状态
         self.running = False
@@ -623,20 +639,28 @@ class BinanceGridBot:
 
     async def _connect_websocket(self):
         """连接 WebSocket 并订阅 ticker 和持仓数据"""
-        async with websockets.connect(WEBSOCKET_URL) as websocket:
-            await self._subscribe_ticker(websocket)
-            await self._subscribe_orders(websocket)
-            while self.running:
-                try:
-                    message = await websocket.recv()
-                    data = json.loads(message)
-                    if data.get("e") == "bookTicker":
-                        await self._handle_ticker_update(message)
-                    elif data.get("e") == "ORDER_TRADE_UPDATE":
-                        await self._handle_order_update(message)
-                except Exception as e:
-                    logger.error(f"WebSocket 消息处理失败: {e}")
-                    break
+        try:
+            async with websockets.connect(WEBSOCKET_URL) as websocket:
+                await self._subscribe_ticker(websocket)
+                await self._subscribe_orders(websocket)
+                logger.info("WebSocket 连接成功，开始接收消息")
+                while self.running:
+                    try:
+                        message = await websocket.recv()
+                        data = json.loads(message)
+                        if data.get("e") == "bookTicker":
+                            await self._handle_ticker_update(message)
+                        elif data.get("e") == "ORDER_TRADE_UPDATE":
+                            await self._handle_order_update(message)
+                    except websockets.exceptions.ConnectionClosed:
+                        logger.warning("WebSocket 连接已关闭，尝试重新连接...")
+                        break
+                    except Exception as e:
+                        logger.error(f"WebSocket 消息处理失败: {e}")
+                        break
+        except Exception as e:
+            logger.error(f"WebSocket 连接失败: {e}")
+            raise e
 
     async def _subscribe_ticker(self, websocket):
         """订阅 ticker 数据"""
@@ -699,6 +723,10 @@ class BinanceGridBot:
 
     async def _handle_order_update(self, message):
         """处理订单更新和持仓更新"""
+        # 延迟初始化锁
+        if self.lock is None:
+            self.lock = asyncio.Lock()
+        
         async with self.lock:
             data = json.loads(message)
 
