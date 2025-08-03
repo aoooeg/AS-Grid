@@ -28,6 +28,8 @@
 [![GitHub issues](https://img.shields.io/github/issues/princeniu/AS-Grid)](https://github.com/princeniu/AS-Grid/issues)
 [![GitHub pull requests](https://img.shields.io/github/issues-pr/princeniu/AS-Grid)](https://github.com/princeniu/AS-Grid/pulls)
 
+[☕ 请我喝咖啡](https://buymeacoffee.com/princeniu)
+
 </div>
 
 ---
@@ -515,7 +517,5 @@ tail -f log/status_summary.log    # 状态汇总
 <div align="center">
 
 **为加密货币交易社区精心打造 ❤️**
-
-[报告问题](https://github.com/your-repo/issues) • [功能请求](https://github.com/your-repo/issues) • [贡献指南](CONTRIBUTING.md)
 
 </div>

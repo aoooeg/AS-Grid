@@ -28,6 +28,8 @@
 [![GitHub issues](https://img.shields.io/github/issues/princeniu/AS-Grid)](https://github.com/princeniu/AS-Grid/issues)
 [![GitHub pull requests](https://img.shields.io/github/issues-pr/princeniu/AS-Grid)](https://github.com/princeniu/AS-Grid/pulls)
 
+[☕ Buy me a coffee](https://buymeacoffee.com/princeniu)
+
 </div>
 
 ---
@@ -146,7 +148,7 @@ flowchart TB
         J2[Error Handler]
     end
 
-    D2 --> Bots & Bots & Bots
+    D2 --> Bots
     E2 --> Shared
     F2 --> Shared
     G2 --> Shared
@@ -515,7 +517,5 @@ For issues and questions:
 <div align="center">
 
 **Made with ❤️ for the crypto trading community**
-
-[Report Bug](https://github.com/your-repo/issues) • [Request Feature](https://github.com/your-repo/issues) • [Contributing](CONTRIBUTING.md)
 
 </div>
