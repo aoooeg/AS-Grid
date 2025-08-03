@@ -11,8 +11,8 @@ from decimal import Decimal, ROUND_HALF_UP
 import os
 
 # ==================== 配置 ====================
-API_KEY = "ed944f60719106360c7bfe6c6d83b26d"  # 替换为你的 API Key
-API_SECRET = "7deb9563882dc7fd9326fb2ec1421b7e42c86c6c92dcf3d0f1e30b58d6c60d2b"  # 替换为你的 API Secret
+API_KEY = ""  # 替换为你的 API Key
+API_SECRET = ""  # 替换为你的 API Secret
 COIN_NAME = "XRP"  # 交易币种
 GRID_SPACING = 0.004  # 网格间距 (0.3%)
 INITIAL_QUANTITY = 1  # 初始交易数量 (张数)
