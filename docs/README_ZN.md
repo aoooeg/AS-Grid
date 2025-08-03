@@ -94,11 +94,11 @@ flowchart TB
     end
 
     %% 连接关系
-    UI --> E
-    Exchange --> E
+    UI --> Core
+    Exchange --> Core
     E --> F --> G --> H --> I
-    E --> Notify
-    Deploy --> E
+    Core --> Notify
+    Deploy --> Core
 ```
 
 ### 单币种 vs 多币种架构
@@ -146,10 +146,10 @@ flowchart TB
         J2[错误处理器]
     end
 
-    D2 --> E2 & F2 & G2
-    E2 --> H2
-    F2 --> H2
-    G2 --> H2
+    D2 --> Bots
+    E2 --> Shared
+    F2 --> Shared
+    G2 --> Shared
 ```
 
 ### 交易流程架构
