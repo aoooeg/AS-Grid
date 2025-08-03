@@ -59,130 +59,131 @@
 ### 整体架构概览
 
 ```mermaid
-graph TB
-    subgraph "用户界面层"
-        A[用户配置] --> B[环境变量]
-        C[币种配置] --> D[多币种设置]
+flowchart TB
+    subgraph UI["🖥️ 用户界面层"]
+        A[用户配置]
+        B[币种配置]
+        C[多币种设置]
+        D[环境变量]
     end
-    
-    subgraph "部署层"
-        E[Docker容器] --> F[Python运行时]
-        F --> G[日志系统]
+
+    subgraph Core["🔥 核心交易引擎"]
+        E[网格交易引擎]
+        F[持仓管理器]
+        G[订单管理器]
+        H[风险控制器]
+        I[价差监控器]
     end
-    
-    subgraph "交易所层"
-        H[交易所API] --> I[REST API调用]
-        J[WebSocket流] --> K[实时数据]
+
+    subgraph Exchange["🌐 交易所层"]
+        J[交易所API]
+        K[WebSocket流]
+        L[REST API调用]
     end
-    
-    subgraph "核心引擎"
-        L[网格交易引擎] --> M[持仓管理器]
-        M --> N[订单管理器]
-        N --> O[风险控制器]
-        O --> P[价差监控器]
+
+    subgraph Notify["📢 通知系统"]
+        M[Telegram机器人]
+        N[状态监控器]
+        O[性能指标]
     end
-    
-    subgraph "通知系统"
-        Q[Telegram机器人] --> R[警报系统]
-        S[状态监控器] --> T[性能指标]
+
+    subgraph Deploy["🐳 部署层"]
+        P[Docker容器]
+        Q[Python运行时]
+        R[日志系统]
     end
-    
-    B --> L
-    D --> L
-    I --> L
-    K --> L
-    L --> Q
-    L --> S
+
+    %% 连接关系
+    UI --> E
+    Exchange --> E
+    E --> F --> G --> H --> I
+    E --> Notify
+    Deploy --> E
 ```
 
 ### 单币种 vs 多币种架构
 
 #### 单币种模式
 ```mermaid
-graph LR
-    subgraph "单币种机器人"
+flowchart LR
+    subgraph Single["单币种机器人"]
         A1[配置加载器] --> B1[GridBot实例]
         B1 --> C1[WebSocket处理器]
         C1 --> D1[网格循环]
         D1 --> E1[订单管理器]
         E1 --> F1[风险控制器]
     end
-    
-    subgraph "外部系统"
-        G1[交易所API] --> H1[市场数据]
-        I1[Telegram] --> J1[通知]
+
+    subgraph External["外部系统"]
+        G1[交易所API]
+        H1[WebSocket流]
+        I1[Telegram通知]
     end
-    
+
     B1 --> G1
+    C1 --> H1
     F1 --> I1
 ```
 
 #### 多币种模式
 ```mermaid
-graph TB
-    subgraph "多币种控制器"
+flowchart TB
+    subgraph Controller["多币种控制器"]
         A2[配置解析器] --> B2[币种管理器]
         B2 --> C2[机器人工厂]
-        C2 --> D2[线程池]
+        C2 --> D2[线程/异步池]
     end
-    
-    subgraph "独立机器人"
-        E2[机器人1: BTCUSDT] --> F2[网格引擎1]
-        G2[机器人2: ETHUSDT] --> H2[网格引擎2]
-        I2[机器人N: XXXUSDT] --> J2[网格引擎N]
+
+    subgraph Bots["独立机器人"]
+        E2[机器人1: BTCUSDT]
+        F2[机器人2: ETHUSDT]
+        G2[机器人N: XXXUSDT]
     end
-    
-    subgraph "共享资源"
-        K2[日志管理器] --> L2[状态聚合器]
-        M2[错误处理器] --> N2[性能监控器]
+
+    subgraph Shared["共享资源"]
+        H2[日志管理器]
+        I2[状态聚合器]
+        J2[错误处理器]
     end
-    
-    D2 --> E2
-    D2 --> G2
-    D2 --> I2
-    F2 --> K2
-    H2 --> K2
-    J2 --> K2
+
+    D2 --> E2 & F2 & G2
+    E2 --> H2
+    F2 --> H2
+    G2 --> H2
 ```
 
 ### 交易流程架构
 
 ```mermaid
 sequenceDiagram
-    participant U as 用户
-    participant C as 配置
-    participant B as 机器人
-    participant E as 交易所
-    participant W as WebSocket
-    participant N as 通知
-    
-    U->>C: 加载配置
-    C->>B: 初始化机器人
-    B->>E: 设置API连接
-    B->>E: 启用对冲模式
-    B->>W: 连接WebSocket
-    W->>B: 订阅价格数据
-    W->>B: 订阅订单数据
-    
+    participant User as 用户
+    participant Bot as 机器人
+    participant Exchange as 交易所
+    participant WS as WebSocket
+    participant TG as Telegram
+
+    User->>Bot: 加载配置并启动机器人
+    Bot->>Exchange: 初始化API
+    Bot->>Exchange: 启用对冲模式
+    Bot->>WS: 订阅价格和订单数据
+    WS-->>Bot: 实时更新
+
     loop 网格交易循环
-        W->>B: 价格更新
-        B->>B: 检查持仓
-        B->>B: 检查订单
-        B->>B: 执行网格逻辑
-        
-        alt 持仓 = 0
-            B->>E: 挂入场订单
-        else 持仓 > 0
-            B->>E: 挂止盈订单
-            B->>E: 挂补仓订单
+        WS-->>Bot: 价格/订单更新
+        Bot->>Bot: 检查持仓和订单
+        alt 无持仓
+            Bot->>Exchange: 挂入场订单
+        else 有持仓
+            Bot->>Exchange: 挂止盈订单
+            Bot->>Exchange: 挂补仓订单
         end
-        
-        B->>B: 风险管理
-        B->>N: 发送状态更新
+        Bot->>Bot: 执行风险控制
+        Bot->>TG: 发送状态更新
+        Bot->>TG: 风险/警告通知
     end
-    
-    B->>N: 错误通知
-    B->>E: 取消挂单
+
+    Bot->>TG: 错误通知
+    Bot->>Exchange: 取消挂单
 ```
 
 ## 🏆 支持的交易所

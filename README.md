@@ -59,130 +59,131 @@
 ### System Architecture Overview
 
 ```mermaid
-graph TB
-    subgraph "User Interface"
-        A[User Configuration] --> B[Environment Variables]
-        C[Symbols Config] --> D[Multi-Currency Setup]
+flowchart TB
+    subgraph UI["🖥️ User & Config"]
+        A[User Configuration]
+        B[Symbols Config]
+        C[Multi-Currency Setup]
+        D[Environment Variables]
     end
-    
-    subgraph "Deployment Layer"
-        E[Docker Container] --> F[Python Runtime]
-        F --> G[Logging System]
+
+    subgraph Core["🔥 Core Trading Engine"]
+        E[Grid Trading Engine]
+        F[Position Manager]
+        G[Order Manager]
+        H[Risk Controller]
+        I[Spread Monitor]
     end
-    
-    subgraph "Exchange Layer"
-        H[Binance API] --> I[REST API Calls]
-        J[WebSocket Streams] --> K[Real-time Data]
+
+    subgraph Exchange["🌐 Exchange Layer"]
+        J[Exchange API]
+        K[WebSocket Streams]
+        L[REST API Calls]
     end
-    
-    subgraph "Core Engine"
-        L[Grid Trading Engine] --> M[Position Manager]
-        M --> N[Order Manager]
-        N --> O[Risk Controller]
-        O --> P[Spread Monitor]
+
+    subgraph Notify["📢 Notification & Monitoring"]
+        M[Telegram Bot]
+        N[Status Monitor]
+        O[Performance Metrics]
     end
-    
-    subgraph "Notification System"
-        Q[Telegram Bot] --> R[Alert System]
-        S[Status Monitor] --> T[Performance Metrics]
+
+    subgraph Deploy["🐳 Deployment"]
+        P[Docker Container]
+        Q[Python Runtime]
+        R[Logging System]
     end
-    
-    B --> L
-    D --> L
-    I --> L
-    K --> L
-    L --> Q
-    L --> S
+
+    %% Connections
+    UI --> E
+    Exchange --> E
+    E --> F --> G --> H --> I
+    E --> Notify
+    Deploy --> E
 ```
 
 ### Single Currency vs Multi-Currency Architecture
 
 #### Single Currency Mode
 ```mermaid
-graph LR
-    subgraph "Single Currency Bot"
-        A1[Config Loader] --> B1[BinanceGridBot Instance]
+flowchart LR
+    subgraph Single["Single Currency Bot"]
+        A1[Config Loader] --> B1[GridBot Instance]
         B1 --> C1[WebSocket Handler]
         C1 --> D1[Grid Loop]
         D1 --> E1[Order Manager]
         E1 --> F1[Risk Controller]
     end
-    
-    subgraph "External Systems"
-        G1[Binance API] --> H1[Market Data]
-        I1[Telegram] --> J1[Notifications]
+
+    subgraph External["External Systems"]
+        G1[Exchange API]
+        H1[WebSocket Streams]
+        I1[Telegram Notification]
     end
-    
+
     B1 --> G1
+    C1 --> H1
     F1 --> I1
 ```
 
 #### Multi-Currency Mode
 ```mermaid
-graph TB
-    subgraph "Multi-Currency Controller"
+flowchart TB
+    subgraph Controller["Multi-Currency Controller"]
         A2[Config Parser] --> B2[Symbol Manager]
         B2 --> C2[Bot Factory]
-        C2 --> D2[Thread Pool]
+        C2 --> D2[Thread/Async Pool]
     end
-    
-    subgraph "Individual Bots"
-        E2[Bot 1: BTCUSDT] --> F2[Grid Engine 1]
-        G2[Bot 2: ETHUSDT] --> H2[Grid Engine 2]
-        I2[Bot N: XXXUSDT] --> J2[Grid Engine N]
+
+    subgraph Bots["Individual Bots"]
+        E2[Bot 1: BTCUSDT]
+        F2[Bot 2: ETHUSDT]
+        G2[Bot N: XXXUSDT]
     end
-    
-    subgraph "Shared Resources"
-        K2[Log Manager] --> L2[Status Aggregator]
-        M2[Error Handler] --> N2[Performance Monitor]
+
+    subgraph Shared["Shared Resources"]
+        H2[Log Manager]
+        I2[Status Aggregator]
+        J2[Error Handler]
     end
-    
-    D2 --> E2
-    D2 --> G2
-    D2 --> I2
-    F2 --> K2
-    H2 --> K2
-    J2 --> K2
+
+    D2 --> E2 & F2 & G2
+    E2 --> H2
+    F2 --> H2
+    G2 --> H2
 ```
 
 ### Trading Flow Architecture
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant C as Config
-    participant B as Bot
-    participant E as Exchange
-    participant W as WebSocket
-    participant N as Notifications
-    
-    U->>C: Load Configuration
-    C->>B: Initialize Bot
-    B->>E: Setup API Connection
-    B->>E: Enable Hedge Mode
-    B->>W: Connect WebSocket
-    W->>B: Subscribe to Ticker
-    W->>B: Subscribe to Orders
-    
+    participant User
+    participant Bot
+    participant Exchange
+    participant WS as WebSocket
+    participant TG as Telegram
+
+    User->>Bot: Load Config & Start Bot
+    Bot->>Exchange: Init API
+    Bot->>Exchange: Enable Hedge Mode
+    Bot->>WS: Subscribe to Price & Orders
+    WS-->>Bot: Real-time Updates
+
     loop Grid Trading Loop
-        W->>B: Price Update
-        B->>B: Check Positions
-        B->>B: Check Orders
-        B->>B: Execute Grid Logic
-        
-        alt Position = 0
-            B->>E: Place Entry Orders
-        else Position > 0
-            B->>E: Place Take-Profit Orders
-            B->>E: Place Averaging Orders
+        WS-->>Bot: Price/Order Update
+        Bot->>Bot: Check Positions & Orders
+        alt No Position
+            Bot->>Exchange: Place Entry Orders
+        else With Position
+            Bot->>Exchange: Place Take-Profit Orders
+            Bot->>Exchange: Place Averaging Orders
         end
-        
-        B->>B: Risk Management
-        B->>N: Send Status Updates
+        Bot->>Bot: Execute Risk Control
+        Bot->>TG: Send Status Update
+        Bot->>TG: Risk/Warning Notification
     end
-    
-    B->>N: Error Notifications
-    B->>E: Cancel Pending Orders
+
+    Bot->>TG: Error Notifications
+    Bot->>Exchange: Cancel Pending Orders
 ```
 
 ## 🏆 Supported Exchanges
