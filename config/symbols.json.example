@@ -1,0 +1,46 @@
+{
+  "symbols": [
+    {
+      "name": "SOL",
+      "grid_spacing": 0.005,
+      "initial_quantity": 0.05,
+      "leverage": 20,
+      "contract_type": "USDC",
+      "_comment": "SOL币种配置 - 网格间距0.005，初始数量0.05个，20倍杠杆，USDC合约"
+    },
+    {
+      "name": "BTC",
+      "grid_spacing": 50,
+      "initial_quantity": 0.001,
+      "leverage": 10,
+      "contract_type": "USDT",
+      "_comment": "BTC币种配置示例 - 网格间距50美元，初始数量0.001个，10倍杠杆，USDT合约"
+    },
+    {
+      "name": "ETH",
+      "grid_spacing": 5,
+      "initial_quantity": 0.01,
+      "leverage": 15,
+      "contract_type": "USDT",
+      "_comment": "ETH币种配置示例 - 网格间距5美元，初始数量0.01个，15倍杠杆，USDT合约"
+    },
+    {
+      "name": "DOGE",
+      "grid_spacing": 0.0001,
+      "initial_quantity": 100,
+      "leverage": 30,
+      "contract_type": "USDC",
+      "_comment": "DOGE币种配置示例 - 网格间距0.0001，初始数量100个，30倍杠杆，USDC合约"
+    }
+  ],
+  "_config_info": {
+    "description": "多币种网格交易配置文件示例",
+    "fields": {
+      "name": "币种名称（如SUI、SOL、BTC等）",
+      "grid_spacing": "网格间距，决定每个网格之间的价格差",
+      "initial_quantity": "初始交易数量",
+      "leverage": "杠杆倍数（1-125倍）",
+      "contract_type": "合约类型（USDC或USDT）"
+    }
+  }
+} 

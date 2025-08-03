@@ -1,0 +1,39 @@
+# 多币种网格交易配置文件示例
+# 每个币种可以独立设置网格间距、初始数量和杠杆倍数
+# 
+# 配置说明：
+# - name: 币种名称（如SUI、SOL、BTC等）
+# - grid_spacing: 网格间距，决定每个网格之间的价格差
+# - initial_quantity: 初始交易数量
+# - leverage: 杠杆倍数（1-125倍）
+# - contract_type: 合约类型（USDC或USDT）
+
+symbols:
+    
+  # SOL币种配置  
+  - name: SOL
+    grid_spacing: 0.005       # 网格间距0.005
+    initial_quantity: 0.05    # 初始数量0.05个
+    leverage: 20              # 20倍杠杆
+    contract_type: USDC       # USDC合约
+    
+  # BTC币种配置示例
+  - name: BTC
+    grid_spacing: 50          # 网格间距50美元
+    initial_quantity: 0.001   # 初始数量0.001个
+    leverage: 10              # 10倍杠杆
+    contract_type: USDT       # USDT合约
+    
+  # ETH币种配置示例
+  - name: ETH
+    grid_spacing: 5           # 网格间距5美元
+    initial_quantity: 0.01    # 初始数量0.01个
+    leverage: 15              # 15倍杠杆
+    contract_type: USDT       # USDT合约
+    
+  # DOGE币种配置示例
+  - name: DOGE
+    grid_spacing: 0.0001      # 网格间距0.0001
+    initial_quantity: 100     # 初始数量100个
+    leverage: 30              # 30倍杠杆
+    contract_type: USDC       # USDC合约 
