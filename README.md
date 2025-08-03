@@ -94,11 +94,11 @@ flowchart TB
     end
 
     %% Connections
-    UI --> E
-    Exchange --> E
+    UI --> Core
+    Exchange --> Core
     E --> F --> G --> H --> I
-    E --> Notify
-    Deploy --> E
+    Core --> Notify
+    Deploy --> Core
 ```
 
 ### Single Currency vs Multi-Currency Architecture
@@ -146,10 +146,10 @@ flowchart TB
         J2[Error Handler]
     end
 
-    D2 --> E2 & F2 & G2
-    E2 --> H2
-    F2 --> H2
-    G2 --> H2
+    D2 --> Bots & Bots & Bots
+    E2 --> Shared
+    F2 --> Shared
+    G2 --> Shared
 ```
 
 ### Trading Flow Architecture
