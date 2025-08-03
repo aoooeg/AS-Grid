@@ -1,6 +1,14 @@
 # AS Grid Trading Bot
 
+<div align="center">
+
 [English](README.md) | [中文](docs/README_ZN.md)
+
+![AS Grid Trading Bot Demo](assets/images/as-grid-trading-demo.png)
+
+*SUI/USDC Perpetual Contract Real-time Trading Demo - Intelligent Grid Trading Strategy*
+
+</div>
 
 <div align="center">
 

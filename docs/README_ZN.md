@@ -1,6 +1,14 @@
 # AS网格交易机器人
 
+<div align="center">
+
 [English](README.md) | [中文](docs/README_ZN.md)
+
+![AS网格交易机器人演示](../assets/images/as-grid-trading-demo.png)
+
+*SUI/USDC 永续合约实时交易演示 - 智能网格交易策略*
+
+</div>
 
 <div align="center">
 
