@@ -13,7 +13,20 @@
 
 *Intelligent bidirectional grid trading with real-time risk control and multi-currency support*
 
-[🚀 Quick Start](#-quick-start) • [📋 Features](#-features) • [🔧 Configuration](#-configuration) • [📊 Monitoring](#-monitoring) • [⚠️ Security](#-security)
+[🚀 Quick Start](#-quick-start) • [📋 Features](#-features) • [🏗️ Architecture](#️-architecture) • [🔧 Configuration](#-configuration) • [📊 Monitoring](#-monitoring) • [⚠️ Security](#-security)
+
+</div>
+
+---
+
+<div align="center">
+
+⭐ **If you like AS-Grid, consider giving it a star!** It helps more traders discover this project.
+
+[![GitHub stars](https://img.shields.io/github/stars/princeniu/AS-Grid?style=social)](https://github.com/princeniu/AS-Grid)
+[![GitHub forks](https://img.shields.io/github/forks/princeniu/AS-Grid?style=social)](https://github.com/princeniu/AS-Grid)
+[![GitHub issues](https://img.shields.io/github/issues/princeniu/AS-Grid)](https://github.com/princeniu/AS-Grid/issues)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/princeniu/AS-Grid)](https://github.com/princeniu/AS-Grid/pulls)
 
 </div>
 
@@ -40,6 +53,137 @@
 - **Automatic Spread Correction**: Grid realignment when price spreads exceed thresholds
 - **Order Cooldown Mechanism**: Prevents excessive trading frequency
 - **Precision Adaptation**: Automatic acquisition of trading pair precision requirements
+
+## 🏗️ Architecture
+
+### System Architecture Overview
+
+```mermaid
+graph TB
+    subgraph "User Interface"
+        A[User Configuration] --> B[Environment Variables]
+        C[Symbols Config] --> D[Multi-Currency Setup]
+    end
+    
+    subgraph "Deployment Layer"
+        E[Docker Container] --> F[Python Runtime]
+        F --> G[Logging System]
+    end
+    
+    subgraph "Exchange Layer"
+        H[Binance API] --> I[REST API Calls]
+        J[WebSocket Streams] --> K[Real-time Data]
+    end
+    
+    subgraph "Core Engine"
+        L[Grid Trading Engine] --> M[Position Manager]
+        M --> N[Order Manager]
+        N --> O[Risk Controller]
+        O --> P[Spread Monitor]
+    end
+    
+    subgraph "Notification System"
+        Q[Telegram Bot] --> R[Alert System]
+        S[Status Monitor] --> T[Performance Metrics]
+    end
+    
+    B --> L
+    D --> L
+    I --> L
+    K --> L
+    L --> Q
+    L --> S
+```
+
+### Single Currency vs Multi-Currency Architecture
+
+#### Single Currency Mode
+```mermaid
+graph LR
+    subgraph "Single Currency Bot"
+        A1[Config Loader] --> B1[BinanceGridBot Instance]
+        B1 --> C1[WebSocket Handler]
+        C1 --> D1[Grid Loop]
+        D1 --> E1[Order Manager]
+        E1 --> F1[Risk Controller]
+    end
+    
+    subgraph "External Systems"
+        G1[Binance API] --> H1[Market Data]
+        I1[Telegram] --> J1[Notifications]
+    end
+    
+    B1 --> G1
+    F1 --> I1
+```
+
+#### Multi-Currency Mode
+```mermaid
+graph TB
+    subgraph "Multi-Currency Controller"
+        A2[Config Parser] --> B2[Symbol Manager]
+        B2 --> C2[Bot Factory]
+        C2 --> D2[Thread Pool]
+    end
+    
+    subgraph "Individual Bots"
+        E2[Bot 1: BTCUSDT] --> F2[Grid Engine 1]
+        G2[Bot 2: ETHUSDT] --> H2[Grid Engine 2]
+        I2[Bot N: XXXUSDT] --> J2[Grid Engine N]
+    end
+    
+    subgraph "Shared Resources"
+        K2[Log Manager] --> L2[Status Aggregator]
+        M2[Error Handler] --> N2[Performance Monitor]
+    end
+    
+    D2 --> E2
+    D2 --> G2
+    D2 --> I2
+    F2 --> K2
+    H2 --> K2
+    J2 --> K2
+```
+
+### Trading Flow Architecture
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as Config
+    participant B as Bot
+    participant E as Exchange
+    participant W as WebSocket
+    participant N as Notifications
+    
+    U->>C: Load Configuration
+    C->>B: Initialize Bot
+    B->>E: Setup API Connection
+    B->>E: Enable Hedge Mode
+    B->>W: Connect WebSocket
+    W->>B: Subscribe to Ticker
+    W->>B: Subscribe to Orders
+    
+    loop Grid Trading Loop
+        W->>B: Price Update
+        B->>B: Check Positions
+        B->>B: Check Orders
+        B->>B: Execute Grid Logic
+        
+        alt Position = 0
+            B->>E: Place Entry Orders
+        else Position > 0
+            B->>E: Place Take-Profit Orders
+            B->>E: Place Averaging Orders
+        end
+        
+        B->>B: Risk Management
+        B->>N: Send Status Updates
+    end
+    
+    B->>N: Error Notifications
+    B->>E: Cancel Pending Orders
+```
 
 ## 🏆 Supported Exchanges
 
