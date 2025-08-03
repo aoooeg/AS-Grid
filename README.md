@@ -28,7 +28,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/princeniu/AS-Grid)](https://github.com/princeniu/AS-Grid/issues)
 [![GitHub pull requests](https://img.shields.io/github/issues-pr/princeniu/AS-Grid)](https://github.com/princeniu/AS-Grid/pulls)
 
-[☕ Buy me a coffee](https://buymeacoffee.com/princeniu)
+[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-☕%20Support%20me-orange?style=for-the-badge&logo=buymeacoffee)](https://buymeacoffee.com/princeniu)
 
 </div>
 
