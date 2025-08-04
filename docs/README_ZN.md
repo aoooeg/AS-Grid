@@ -10,10 +10,6 @@
 
 [English](README.md) | [中文](docs/README_ZN.md)
 
-![AS网格交易机器人演示](../assets/images/as-grid-trading-demo.png)
-
-*SUI/USDC 永续合约实时交易演示 - 智能网格交易策略*
-
 </div>
 
 <div align="center">
@@ -28,6 +24,10 @@
 *智能双向网格交易，实时风险控制，多币种支持*
 
 [🚀 快速开始](#-快速开始) • [📋 功能特性](#-功能特性) • [🏗️ 系统架构](#️-系统架构) • [🔧 配置说明](#-配置说明) • [📊 监控管理](#-监控管理) • [⚠️ 安全风险](#-安全风险)
+
+![AS网格交易机器人演示](../assets/images/as-grid-trading-demo.png)
+
+*SUI/USDC 永续合约实时交易演示 - 智能网格交易策略*
 
 </div>
 

@@ -10,10 +10,6 @@
 
 [English](README.md) | [中文](docs/README_ZN.md)
 
-![AS Grid Trading Bot Demo](assets/images/as-grid-trading-demo.png)
-
-*SUI/USDC Perpetual Contract Real-time Trading Demo - Intelligent Grid Trading Strategy*
-
 </div>
 
 <div align="center">
@@ -28,6 +24,11 @@
 *Intelligent bidirectional grid trading with real-time risk control and multi-currency support*
 
 [🚀 Quick Start](#-quick-start) • [📋 Features](#-features) • [🏗️ Architecture](#️-architecture) • [🔧 Configuration](#-configuration) • [📊 Monitoring](#-monitoring) • [⚠️ Security](#-security)
+
+
+![AS Grid Trading Bot Demo](assets/images/as-grid-trading-demo.png)
+
+*SUI/USDC Perpetual Contract Real-time Trading Demo - Intelligent Grid Trading Strategy*
 
 </div>
 
