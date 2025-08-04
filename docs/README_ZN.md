@@ -2,6 +2,12 @@
 
 <div align="center">
 
+<img src="../assets/images/logo.png" alt="AS网格交易机器人Logo" width="100" height="100" style="border-radius: 50%;">
+
+</div>
+
+<div align="center">
+
 [English](README.md) | [中文](docs/README_ZN.md)
 
 ![AS网格交易机器人演示](../assets/images/as-grid-trading-demo.png)

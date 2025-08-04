@@ -2,6 +2,12 @@
 
 <div align="center">
 
+<img src="assets/images/logo.png" alt="AS Grid Trading Bot Logo" width="100" height="100" style="border-radius: 50%;">
+
+</div>
+
+<div align="center">
+
 [English](README.md) | [中文](docs/README_ZN.md)
 
 ![AS Grid Trading Bot Demo](assets/images/as-grid-trading-demo.png)
