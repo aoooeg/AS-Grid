@@ -54,20 +54,50 @@ check_requirements() {
 
 start_single_bot() {
     print_info "启动单币种网格机器人..."
-    
-    if [ ! -f "src/single_bot/binance_bot.py" ]; then
-        print_error "src/single_bot/binance_bot.py 文件不存在"
-        exit 1
-    fi
-    
-    # 创建 PID 文件
-    echo $$ > grid_bot.pid
-    
-    # 启动单币种机器人
-    python3 src/single_bot/binance_bot.py
-    
-    # 清理 PID 文件
-    rm -f grid_bot.pid
+
+	# 加载环境变量
+	if [ -f "config/.env" ]; then
+		set -a
+		source config/.env
+		set +a
+	else
+		print_error "config/.env 文件不存在，请先配置环境变量"
+		exit 1
+	fi
+
+	# 根据 EXCHANGE 分支
+	exchange="${EXCHANGE:-gate}"
+	exchange_lc="${exchange,,}"
+	print_info "选择的交易所: ${exchange_lc}"
+
+	# 启动前的文件检查
+	if [ "${exchange_lc}" = "binance" ]; then
+		if [ ! -f "src/single_bot/binance_bot.py" ]; then
+			print_error "src/single_bot/binance_bot.py 文件不存在"
+			exit 1
+		fi
+	elif [ "${exchange_lc}" = "gate" ]; then
+		if [ ! -f "src/single_bot/gate_bot.py" ]; then
+			print_error "src/single_bot/gate_bot.py 文件不存在"
+			exit 1
+		fi
+	else 
+		print_error "不支持的 EXCHANGE 值: ${EXCHANGE}，应为 binance 或 gate"
+		exit 1
+	fi
+
+	# 创建 PID 文件
+	echo $$ > grid_bot.pid
+
+	# 按交易所启动单币种机器人
+	if [ "${exchange_lc}" = "binance" ]; then
+		python3 src/single_bot/binance_bot.py
+	else
+		python3 src/single_bot/gate_bot.py
+	fi
+
+	# 清理 PID 文件
+	rm -f grid_bot.pid
 }
 
 start_multi_bot() {
