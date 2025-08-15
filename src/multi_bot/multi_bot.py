@@ -119,7 +119,8 @@ def create_bot_logger(symbol):
     Returns:
         logging.Logger: 日志记录器
     """
-    return create_bot_logger(symbol)
+    from logging_config import create_bot_logger as create_logger
+    return create_logger(symbol)
 
 def run_single_bot(symbol_config, api_key, api_secret):
     """
