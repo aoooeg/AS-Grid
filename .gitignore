@@ -185,6 +185,7 @@ Thumbs.db
 *.bak
 *.backup
 *.old
+*.history
 
 # 测试覆盖率报告
 .coverage
@@ -197,4 +198,4 @@ htmlcov/
 # 编译文件
 *.pyc
 *.pyo
-*.pyd 
+*.pyd

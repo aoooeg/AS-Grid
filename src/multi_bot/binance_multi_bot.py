@@ -903,14 +903,24 @@ class BinanceGridBot:
 
     def _place_take_profit_order(self, ccxt_symbol, side, price, quantity):
         """挂止盈单"""
+        # 先按精度 round
+        price = round(float(price), self.price_precision)
+
+        # 如果已有“同价位”的止盈单则跳过（使用 round 后的严格相等判断）
         orders = self.exchange.fetch_open_orders(ccxt_symbol)
         for order in orders:
+            pos = order['info'].get('positionSide')
+            s = order['side']
+            try:
+                op = round(float(order['price']), self.price_precision)
+            except Exception:
+                op = None
             if (
-                    order['info'].get('positionSide') == side.upper()
-                    and float(order['price']) == price
-                    and order['side'] == ('sell' if side == 'long' else 'buy')
+                pos == side.upper()
+                and s == ('sell' if side == 'long' else 'buy')
+                and op is not None and op == price
             ):
-                logger.info(f"已存在相同价格的 {side} 止盈单，跳过挂单")
+                logger.info(f"已存在相同价格的 {side} 止盈单({price})，跳过挂单")
                 return
 
         try:
@@ -921,10 +931,8 @@ class BinanceGridBot:
                 logger.warning("没有空头持仓，跳过挂出空头止盈单")
                 return
 
-            price = round(price, self.price_precision)
-            quantity = round(quantity, self.amount_precision)
-            quantity = max(quantity, self.min_order_amount)
-
+            qty = round(float(quantity), self.amount_precision)
+            qty = max(qty, self.min_order_amount)
             if side == 'long':
                 import uuid
                 client_order_id = f"x-TBzTen1X-{uuid.uuid4().hex[:8]}"
@@ -933,41 +941,68 @@ class BinanceGridBot:
                     'reduce_only': True,
                     'positionSide': 'LONG'
                 }
-                order = self.exchange.create_order(ccxt_symbol, 'limit', 'sell', quantity, price, params)
-                logger.info(f"成功挂 long 止盈单: 卖出 {quantity} {ccxt_symbol} @ {price}")
+                order = self.exchange.create_order(ccxt_symbol, 'limit', 'sell', qty, price, params)
+                logger.info(f"成功挂 long 止盈单: 卖出 {qty} {ccxt_symbol} @ {price}")
             elif side == 'short':
                 import uuid
                 client_order_id = f"x-TBzTen1X-{uuid.uuid4().hex[:8]}"
-                order = self.exchange.create_order(ccxt_symbol, 'limit', 'buy', quantity, price, {
+                order = self.exchange.create_order(ccxt_symbol, 'limit', 'buy', qty, price, {
                     'newClientOrderId': client_order_id,
                     'reduce_only': True,
                     'positionSide': 'SHORT'
                 })
-                logger.info(f"成功挂 short 止盈单: 买入 {quantity} {ccxt_symbol} @ {price}")
+                logger.info(f"成功挂 short 止盈单: 买入 {qty} {ccxt_symbol} @ {price}")
         except ccxt.BaseError as e:
             logger.error(f"挂止盈单失败: {e}")
 
+    # ===== 核心：多头下单逻辑（修复：只加倍止盈、不加倍补仓；装死限幅；下单后更新冷却时间）=====
     async def _place_long_orders(self, latest_price):
         """挂多头订单"""
         try:
-            self._get_take_profit_quantity(self.long_position, 'long')
+            # 根据当前持仓情况动态调整多头下单数量（可能翻倍）
+            self._get_take_profit_quantity(self.long_position, 'long')  # 只影响止盈数量
+            if self.long_position <= 0:
+                return
+            placed_any = False
+            
+            # 只有在有多头持仓时才进行挂单操作
             if self.long_position > 0:
+                # 检查是否超过极限阈值，决定是否进入"装死"模式
                 if self.long_position > self.position_threshold:
+                    # 装死模式：持仓过大，停止开新仓，只补止盈单
                     logger.info(f"持仓{self.long_position}超过极限阈值 {self.position_threshold}，long装死")
-                    if self.sell_long_orders <= 0:
-                        if self.short_position > 0:
-                            r = float((self.long_position / self.short_position) / 100 + 1)
-                        else:
-                            r = 1.01
-                        self._place_take_profit_order(self.ccxt_symbol, 'long', self.latest_price * r,
-                                                     self.long_initial_quantity)
+                    # 计算装死止盈价并限幅
+                    r = self._compute_tp_multiplier('long')
+                    tp_price = self.latest_price * r
+                    placed_any |= self._ensure_take_profit_at(
+                        side='long',
+                        target_price=tp_price,
+                        quantity=self.long_initial_quantity,
+                        tol_ratio=max(self.grid_spacing * 0.2, 0.001),
+                    )
+                    
                 else:
+                    # 正常网格：先更新中线，再只撤开仓挂单，止盈按目标价“校准/重挂”，补仓用基础数量
                     self._update_mid_price('long', latest_price)
-                    self._cancel_orders_for_side('long')
-                    self._place_take_profit_order(self.ccxt_symbol, 'long', self.upper_price_long,
-                                                 self.long_initial_quantity)
-                    self._place_order('buy', self.lower_price_long, self.long_initial_quantity, False, 'long')
+                    self._cancel_open_orders_for_side('long')
+
+                    # 止盈（可能重挂）：用 long_initial_quantity（可能=2*initial_quantity）
+                    placed_any |= self._ensure_take_profit_at(
+                        side='long',
+                        target_price=self.upper_price_long,
+                        quantity=self.long_initial_quantity,
+                        tol_ratio=max(self.grid_spacing * 0.2, 0.001),
+                    )
+
+                    # 补仓：始终使用基础数量 initial_quantity，而不是“加倍后”的 long_initial_quantity
+                    open_qty = max(self.min_order_amount, round(self.initial_quantity, self.amount_precision))
+                    if self._place_order('buy', self.lower_price_long, open_qty, False, 'long'):
+                        placed_any = True
                     logger.info("挂多头止盈，挂多头补仓")
+
+                # 若本轮确实有挂出新单/重挂，则更新冷却时间戳
+                if placed_any:
+                    self.last_long_order_time = time.time()
 
         except Exception as e:
             logger.error(f"挂多头订单失败: {e}")
@@ -975,26 +1010,47 @@ class BinanceGridBot:
     async def _place_short_orders(self, latest_price):
         """挂空头订单"""
         try:
+            # 根据当前持仓情况动态调整空头下单数量（可能翻倍）
             self._get_take_profit_quantity(self.short_position, 'short')
+            if self.short_position <= 0:
+                return
+            placed_any = False
+            
+            # 只有在有空头持仓时才进行挂单操作
             if self.short_position > 0:
+                # 检查是否超过极限阈值，决定是否进入"装死"模式
                 if self.short_position > self.position_threshold:
+                    # 装死模式：持仓过大，停止开新仓，只补止盈单
                     logger.info(f"持仓{self.short_position}超过极限阈值 {self.position_threshold}，short 装死")
-                    if self.buy_short_orders <= 0:
-                        if self.long_position > 0:
-                            r = float((self.short_position / self.long_position) / 100 + 1)
-                        else:
-                            r = 1.01
-                        logger.info("发现多头止盈单缺失。。需要补止盈单")
-                        self._place_take_profit_order(self.ccxt_symbol, 'short', self.latest_price * r,
-                                                     self.short_initial_quantity)
+                    
+                    r = self._compute_tp_multiplier('short')
+                    tp_price = self.latest_price / r  # 空头止盈价格应该低于现价
+                    placed_any |= self._ensure_take_profit_at(
+                        side='short',
+                        target_price=tp_price,
+                        quantity=self.short_initial_quantity,
+                        tol_ratio=max(self.grid_spacing * 0.2, 0.001),
+                    )
 
                 else:
                     self._update_mid_price('short', latest_price)
-                    self._cancel_orders_for_side('short')
-                    self._place_take_profit_order(self.ccxt_symbol, 'short', self.lower_price_short,
-                                                 self.short_initial_quantity)
-                    self._place_order('sell', self.upper_price_short, self.short_initial_quantity, False, 'short')
+                    self._cancel_open_orders_for_side('short')
+
+                    placed_any |= self._ensure_take_profit_at(
+                        side='short',
+                        target_price=self.lower_price_short,
+                        quantity=self.short_initial_quantity,
+                        tol_ratio=max(self.grid_spacing * 0.2, 0.001),
+                    )
+
+                    open_qty = max(self.min_order_amount, round(self.initial_quantity, self.amount_precision))
+                    if self._place_order('sell', self.upper_price_short, open_qty, False, 'short'):
+                        placed_any = True
                     logger.info("挂空头止盈，挂空头补仓")
+
+                # 若本轮确实有挂出新单/重挂，则更新冷却时间戳
+                if placed_any:
+                    self.last_short_order_time = time.time()
 
         except Exception as e:
             logger.error(f"挂空头订单失败: {e}")
@@ -1062,6 +1118,105 @@ class BinanceGridBot:
                     logger.info(f"距离上次 short 挂止盈时间不足 {ORDER_COOLDOWN_TIME} 秒，跳过本次 short 挂单@ ticker")
                 else:
                     await self._place_short_orders(self.latest_price)
+    
+    # ===== 新增：只撤“开仓”挂单，保留 reduceOnly 的止盈挂单 =====
+    def _cancel_open_orders_for_side(self, position_side: str):
+        """仅撤销某个方向的开仓挂单（reduceOnly=False），保留止盈单"""
+        orders = self.exchange.fetch_open_orders(self.ccxt_symbol)
+        try:
+            for order in orders:
+                side = order.get('side')  # 'buy' / 'sell'
+                pos = order.get('info', {}).get('positionSide', 'BOTH')  # 'LONG' / 'SHORT'
+                # 兼容读取 reduceOnly
+                ro = order.get('reduceOnly')
+                if ro is None:
+                    ro = order.get('info', {}).get('reduceOnly') or order.get('info', {}).get('reduce_only') or False
+
+                if position_side == 'long':
+                    # 多头开仓: buy + LONG + 非 reduceOnly
+                    if (pos == 'LONG') and (side == 'buy') and (not ro):
+                        self._cancel_order(order['id'])
+                elif position_side == 'short':
+                    # 空头开仓: sell + SHORT + 非 reduceOnly
+                    if (pos == 'SHORT') and (side == 'sell') and (not ro):
+                        self._cancel_order(order['id'])
+        except ccxt.OrderNotFound as e:
+            logger.warning(f"撤单时发现不存在的订单: {e}")
+            self._check_orders_status()
+        except Exception as e:
+            logger.error(f"撤销开仓挂单失败: {e}")
+
+    # ===== 新增：获取当前方向已有的止盈单（reduceOnly=True）=====
+    def _get_existing_tp_order(self, side: str):
+        """
+        返回该方向当前已存在的一张 reduceOnly 止盈单（若有）。
+        side: 'long' or 'short'
+        """
+        orders = self.exchange.fetch_open_orders(self.ccxt_symbol)
+        for order in orders:
+            pos = order.get('info', {}).get('positionSide', 'BOTH')
+            s = order.get('side')
+            ro = order.get('reduceOnly')
+            if ro is None:
+                ro = order.get('info', {}).get('reduceOnly') or order.get('info', {}).get('reduce_only') or False
+
+            if side == 'long' and pos == 'LONG' and ro and s == 'sell':
+                return order
+            if side == 'short' and pos == 'SHORT' and ro and s == 'buy':
+                return order
+        return None
+
+    # ===== 新增：确保止盈单在目标价位（偏离超阈值则重挂），返回是否有下单动作 =====
+    def _ensure_take_profit_at(self, side: str, target_price: float, quantity: float, tol_ratio: float = None) -> bool:
+        """
+        side: 'long'/'short'
+        target_price: 目标止盈价（会按精度 round）
+        quantity: 止盈数量（已考虑 double 逻辑）
+        tol_ratio: 相对容忍度（如 0.002 = 0.2%）。默认取 grid_spacing 的 0.2 与 0.1% 的较大值。
+        """
+        if tol_ratio is None:
+            tol_ratio = max(self.grid_spacing * 0.2, 0.001)  # 根据网格间距自适应
+
+        target_price = round(float(target_price), self.price_precision)
+        existing = self._get_existing_tp_order(side)
+        if existing:
+            try:
+                existing_price = round(float(existing['price']), self.price_precision)
+            except Exception:
+                existing_price = None
+
+            if existing_price is not None:
+                rel_diff = abs(existing_price / target_price - 1.0)
+                if rel_diff <= tol_ratio:
+                    # 已有止盈价足够接近，不重挂
+                    return False
+                else:
+                    # 价格偏离明显，先撤再重挂
+                    self._cancel_order(existing['id'])
+
+        # 挂新的止盈
+        self._place_take_profit_order(self.ccxt_symbol, side, target_price, quantity)
+        return True
+
+    # ===== 新增：装死分支的 r 限幅计算 =====
+    def _compute_tp_multiplier(self, side: str) -> float:
+        """
+        计算在“装死”状态下用于调整止盈价的倍数 r，并做上下限约束：
+        下限= max(1 + grid_spacing, 1.01)，上限= min(1 + 3*grid_spacing, 1.05)
+        """
+        if side == 'long':
+            pos, opp = self.long_position, self.short_position
+        else:
+            pos, opp = self.short_position, self.long_position
+
+        if opp > 0:
+            r = 1.0 + (pos / opp) / 100.0
+        else:
+            r = 1.01
+
+        min_r = max(1.0 + self.grid_spacing, 1.01)
+        max_r = min(1.0 + 3.0 * self.grid_spacing, 1.05)
+        return max(min_r, min(r, max_r))
 
     async def start(self):
         """启动机器人"""
@@ -1108,4 +1263,4 @@ class BinanceGridBot:
         logger.info("正在停止机器人...")
         self.running = False
         # 发送停止通知
-        asyncio.create_task(self._send_telegram_message("🛑 **机器人已手动停止**\n\n用户主动停止了网格交易机器人", urgent=False, silent=True)) 
+        asyncio.create_task(self._send_telegram_message("🛑 **机器人已手动停止**\n\n用户主动停止了网格交易机器人", urgent=False, silent=True))
