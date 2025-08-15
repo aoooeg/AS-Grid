@@ -153,12 +153,13 @@ def create_bot_logger(symbol):
 def setup_binance_multi_bot_logging():
     """设置币安多币种机器人的日志配置"""
     
-    # 确保日志目录存在
-    os.makedirs("log", exist_ok=True)
-    
     # 检查是否从单币种脚本调用
     import inspect
     import sys
+    import os
+    
+    # 确保日志目录存在
+    os.makedirs("log", exist_ok=True)
     
     # 遍历调用栈，查找调用者
     log_filename = None
@@ -170,7 +171,6 @@ def setup_binance_multi_bot_logging():
             break
     
     if not log_filename:
-        import os
         script_name = os.path.splitext(os.path.basename(__file__))[0]
         log_filename = f"{script_name}.log"
     
