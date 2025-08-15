@@ -27,44 +27,49 @@ ORDER_COOLDOWN_TIME = 60
 SYNC_TIME = 3
 ORDER_FIRST_TIME = 1
 
-# 日志配置
-os.makedirs("log", exist_ok=True)
-
-# 检查是否从单币种脚本调用
-import inspect
-import sys
-
-# 遍历调用栈，查找调用者
-log_filename = None
-for frame_info in inspect.stack():
-    frame = frame_info.frame
-    filename = frame.f_globals.get('__file__', '')
-    if filename and 'single_bot' in filename and 'binance_bot.py' in filename:
-        log_filename = "binance_single_bot.log"
-        break
-
-if not log_filename:
-    script_name = os.path.splitext(os.path.basename(__file__))[0]
-    log_filename = f"{script_name}.log"
-
-handlers = [logging.StreamHandler()]
+# 使用优化的日志配置
 try:
-    file_handler = logging.FileHandler(f"log/{log_filename}")
-    handlers.append(file_handler)
-    print(f"日志将写入文件: log/{log_filename}")
-except PermissionError as e:
-    print(f"警告: 无法创建日志文件 (权限不足): {e}")
-    print("日志将只输出到控制台")
-except Exception as e:
-    print(f"警告: 无法创建日志文件: {e}")
-    print("日志将只输出到控制台")
+    from logging_config import setup_binance_multi_bot_logging, ThresholdStateLogger
+    logger = setup_binance_multi_bot_logging()
+    threshold_logger = ThresholdStateLogger(logger)
+except ImportError:
+    # 如果导入失败，使用默认配置
+    os.makedirs("log", exist_ok=True)
+    import inspect
+    import sys
+    
+    # 遍历调用栈，查找调用者
+    log_filename = None
+    for frame_info in inspect.stack():
+        frame = frame_info.frame
+        filename = frame.f_globals.get('__file__', '')
+        if filename and 'single_bot' in filename and 'binance_bot.py' in filename:
+            log_filename = "binance_single_bot.log"
+            break
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=handlers,
-)
-logger = logging.getLogger()
+    if not log_filename:
+        script_name = os.path.splitext(os.path.basename(__file__))[0]
+        log_filename = f"{script_name}.log"
+
+    handlers = [logging.StreamHandler()]
+    try:
+        file_handler = logging.FileHandler(f"log/{log_filename}")
+        handlers.append(file_handler)
+        print(f"日志将写入文件: log/{log_filename}")
+    except PermissionError as e:
+        print(f"警告: 无法创建日志文件 (权限不足): {e}")
+        print("日志将只输出到控制台")
+    except Exception as e:
+        print(f"警告: 无法创建日志文件: {e}")
+        print("日志将只输出到控制台")
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=handlers,
+    )
+    logger = logging.getLogger()
+    threshold_logger = None
 
 
 class CustomBinance(ccxt.binance):
@@ -970,7 +975,10 @@ class BinanceGridBot:
                 # 检查是否超过极限阈值，决定是否进入"装死"模式
                 if self.long_position > self.position_threshold:
                     # 装死模式：持仓过大，停止开新仓，只补止盈单
-                    logger.info(f"持仓{self.long_position}超过极限阈值 {self.position_threshold}，long装死")
+                    if threshold_logger:
+                        threshold_logger.log_threshold_status(self.symbol, 'long', self.long_position, self.position_threshold, True)
+                    else:
+                        logger.info(f"持仓{self.long_position}超过极限阈值 {self.position_threshold}，long装死")
                     # 计算装死止盈价并限幅
                     r = self._compute_tp_multiplier('long')
                     tp_price = self.latest_price * r
@@ -982,7 +990,11 @@ class BinanceGridBot:
                     )
                     
                 else:
-                    # 正常网格：先更新中线，再只撤开仓挂单，止盈按目标价“校准/重挂”，补仓用基础数量
+                    # 正常网格：先更新中线，再只撤开仓挂单，止盈按目标价"校准/重挂"，补仓用基础数量
+                    # 检查是否从装死模式恢复正常
+                    if threshold_logger:
+                        threshold_logger.log_threshold_status(self.symbol, 'long', self.long_position, self.position_threshold, False)
+                    
                     self._update_mid_price('long', latest_price)
                     self._cancel_open_orders_for_side('long')
 
@@ -994,7 +1006,7 @@ class BinanceGridBot:
                         tol_ratio=max(self.grid_spacing * 0.2, 0.001),
                     )
 
-                    # 补仓：始终使用基础数量 initial_quantity，而不是“加倍后”的 long_initial_quantity
+                    # 补仓：始终使用基础数量 initial_quantity，而不是"加倍后"的 long_initial_quantity
                     open_qty = max(self.min_order_amount, round(self.initial_quantity, self.amount_precision))
                     if self._place_order('buy', self.lower_price_long, open_qty, False, 'long'):
                         placed_any = True
@@ -1021,7 +1033,10 @@ class BinanceGridBot:
                 # 检查是否超过极限阈值，决定是否进入"装死"模式
                 if self.short_position > self.position_threshold:
                     # 装死模式：持仓过大，停止开新仓，只补止盈单
-                    logger.info(f"持仓{self.short_position}超过极限阈值 {self.position_threshold}，short 装死")
+                    if threshold_logger:
+                        threshold_logger.log_threshold_status(self.symbol, 'short', self.short_position, self.position_threshold, True)
+                    else:
+                        logger.info(f"持仓{self.short_position}超过极限阈值 {self.position_threshold}，short 装死")
                     
                     r = self._compute_tp_multiplier('short')
                     tp_price = self.latest_price / r  # 空头止盈价格应该低于现价
@@ -1033,6 +1048,10 @@ class BinanceGridBot:
                     )
 
                 else:
+                    # 检查是否从装死模式恢复正常
+                    if threshold_logger:
+                        threshold_logger.log_threshold_status(self.symbol, 'short', self.short_position, self.position_threshold, False)
+                    
                     self._update_mid_price('short', latest_price)
                     self._cancel_open_orders_for_side('short')
 

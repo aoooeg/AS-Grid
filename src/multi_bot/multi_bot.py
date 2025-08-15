@@ -13,6 +13,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(__file__))
 from binance_multi_bot import BinanceGridBot
+from logging_config import setup_logging, create_bot_logger, DailyStatusLogger
 
 # 加载环境变量
 load_dotenv()
@@ -21,33 +22,9 @@ load_dotenv()
 running_bots = {}
 stop_event = threading.Event()
 
-# 配置日志
-os.makedirs("log", exist_ok=True)
-
-# 配置主日志
-main_logger = logging.getLogger('main')
-main_logger.setLevel(logging.INFO)
-
-# 控制台处理器
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(console_formatter)
-main_logger.addHandler(console_handler)
-
-# 文件处理器 - 按日期分割
-from logging.handlers import TimedRotatingFileHandler
-file_handler = TimedRotatingFileHandler(
-    'log/multi_grid_BN.log',
-    when='midnight',
-    interval=1,
-    backupCount=7,
-    encoding='utf-8'
-)
-file_handler.setLevel(logging.INFO)
-file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(file_formatter)
-main_logger.addHandler(file_handler)
+# 配置优化的日志系统
+main_logger = setup_logging()
+daily_status_logger = DailyStatusLogger(main_logger)
 
 def load_config(config_file='config/symbols.yaml'):
     """
@@ -142,34 +119,7 @@ def create_bot_logger(symbol):
     Returns:
         logging.Logger: 日志记录器
     """
-    logger = logging.getLogger(f'bot_{symbol}')
-    logger.setLevel(logging.INFO)
-    
-    # 避免重复添加处理器
-    if logger.handlers:
-        return logger
-    
-    # 文件处理器 - 按日期分割
-    from logging.handlers import TimedRotatingFileHandler
-    file_handler = TimedRotatingFileHandler(
-        f'log/grid_BN_{symbol}.log',
-        when='midnight',
-        interval=1,
-        backupCount=7,
-        encoding='utf-8'
-    )
-    file_handler.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-    
-    # 控制台处理器（可选，用于调试）
-    # console_handler = logging.StreamHandler()
-    # console_handler.setLevel(logging.INFO)
-    # console_handler.setFormatter(formatter)
-    # logger.addHandler(console_handler)
-    
-    return logger
+    return create_bot_logger(symbol)
 
 def run_single_bot(symbol_config, api_key, api_secret):
     """
@@ -282,9 +232,10 @@ def print_status():
             if active_bots > 0:
                 symbols = list(running_bots.keys())
                 status_info = f"当前活跃机器人: {active_bots} 个 - {', '.join(symbols)}"
-                main_logger.info(status_info)
+                # 使用每日状态记录器，每天只记录一次
+                daily_status_logger.log_status(status_info)
                 
-                # 写入状态汇总日志
+                # 写入状态汇总日志（保持原有的实时更新）
                 timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
                 status_summary = f"[{timestamp}] Active Bots: {', '.join([f'{s}=Running' for s in symbols])}"
                 
@@ -295,7 +246,7 @@ def print_status():
                 except Exception as e:
                     main_logger.error(f"写入状态汇总日志失败: {e}")
             else:
-                main_logger.info("当前没有活跃的机器人")
+                daily_status_logger.log_status("当前没有活跃的机器人")
                 
                 # 写入状态汇总文件
                 timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -306,7 +257,7 @@ def print_status():
                 except Exception as e:
                     main_logger.error(f"写入状态汇总日志失败: {e}")
                     
-            time.sleep(30)  # 每30秒打印一次状态
+            time.sleep(30)  # 每30秒检查一次状态
         except KeyboardInterrupt:
             break
 
@@ -366,9 +317,10 @@ def main():
             active_bots = len(running_bots)
             if active_bots > 0:
                 symbols = list(running_bots.keys())
-                main_logger.info(f"当前活跃机器人: {active_bots} 个 - {', '.join(symbols)}")
+                # 使用每日状态记录器，每天只记录一次
+                daily_status_logger.log_status(f"当前活跃机器人: {active_bots} 个 - {', '.join(symbols)}")
             else:
-                main_logger.info("当前没有活跃的机器人")
+                daily_status_logger.log_status("当前没有活跃的机器人")
             
             time.sleep(30)  # 每30秒检查一次状态
     except KeyboardInterrupt:
