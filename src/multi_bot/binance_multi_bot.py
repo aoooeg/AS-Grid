@@ -397,7 +397,7 @@ class BinanceGridBot:
 
     async def _check_and_notify_risk_reduction(self):
         """检查并通知风险减仓状态"""
-        local_position_threshold = int(self.position_threshold * 0.8)
+        local_position_threshold = self.position_threshold * 0.8
         both_over_threshold = (self.long_position >= local_position_threshold and 
                               self.short_position >= local_position_threshold)
         
@@ -416,7 +416,7 @@ class BinanceGridBot:
 ⚖️ **双向持仓均超过阈值，执行风险减仓**
 • 多头持仓: {self.long_position}
 • 空头持仓: {self.short_position}
-• 阈值: {int(self.position_threshold * 0.8)}
+• 阈值: {self.position_threshold * 0.8:.2f}
 
 ✅ 已执行部分平仓减少库存风险
 """
@@ -430,7 +430,7 @@ class BinanceGridBot:
 ⚖️ **持仓状况已改善**
 • 多头持仓: {self.long_position}
 • 空头持仓: {self.short_position}
-• 监控阈值: {int(self.position_threshold * 0.8)}
+• 监控阈值: {self.position_threshold * 0.8:.2f}
 
 🟢 **库存风险控制已解除**
 """

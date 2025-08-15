@@ -290,7 +290,7 @@ class GridTradingBot:
 
     async def check_and_notify_risk_reduction(self):
         """检查并通知风险减仓状态"""
-        local_position_threshold = int(POSITION_THRESHOLD * 0.8)
+        local_position_threshold = POSITION_THRESHOLD * 0.8
         both_over_threshold = (self.long_position >= local_position_threshold and 
                               self.short_position >= local_position_threshold)
         
@@ -311,7 +311,7 @@ class GridTradingBot:
 ⚖️ **双向持仓均超过阈值，执行风险减仓**
 • 多头持仓: {self.long_position}
 • 空头持仓: {self.short_position}
-• 阈值: {int(POSITION_THRESHOLD * 0.8)}
+• 阈值: {POSITION_THRESHOLD * 0.8:.2f}
 
 ✅ 已执行部分平仓减少库存风险
 """
@@ -325,7 +325,7 @@ class GridTradingBot:
 ⚖️ **持仓状况已改善**
 • 多头持仓: {self.long_position}
 • 空头持仓: {self.short_position}
-• 监控阈值: {int(POSITION_THRESHOLD * 0.8)}
+• 监控阈值: {POSITION_THRESHOLD * 0.8:.2f}
 
 🟢 **库存风险控制已解除**
 """
@@ -1005,10 +1005,10 @@ class GridTradingBot:
         """检查持仓并减少库存风险"""
 
         # 设置持仓阈值（保持原逻辑）
-        local_position_threshold = int(POSITION_THRESHOLD * 0.8)  # 阈值的 80%
+        local_position_threshold = POSITION_THRESHOLD * 0.8  # 阈值的 80%
 
         # 设置平仓数量（保持原逻辑）
-        REDUCE_QUANTITY = int(POSITION_THRESHOLD * 0.1)  # 阈值的 10%
+        REDUCE_QUANTITY = POSITION_THRESHOLD * 0.1  # 阈值的 10%
 
         # 检查并通知风险减仓状态（新增通知逻辑）
         await self.check_and_notify_risk_reduction()
