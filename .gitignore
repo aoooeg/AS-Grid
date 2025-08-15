@@ -136,8 +136,12 @@ config/*.yml
 config/*.ini
 
 # 日志文件
+log/
 log/*.log
 log/*.txt
+log/*.log.*
+log/*.log.gz
+log/*.log.bz2
 
 # 环境变量文件
 .env
