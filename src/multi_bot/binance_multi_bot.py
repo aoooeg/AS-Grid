@@ -106,8 +106,10 @@ class BinanceGridBot:
         self.contract_type = config.get('contract_type', 'USDT')
         
         # 计算阈值
-        self.position_threshold = 10 * self.initial_quantity / self.grid_spacing * 2 / 100
-        self.position_limit = 5 * self.initial_quantity / self.grid_spacing * 2 / 100
+        self.position_threshold_factor = float(self.config.get('position_threshold_factor', 10))
+        self.position_limit_factor = float(self.config.get('position_limit_factor', 5))
+        self.position_threshold = self.position_threshold_factor * self.initial_quantity / self.grid_spacing * 2 / 100
+        self.position_limit = self.position_limit_factor * self.initial_quantity / self.grid_spacing * 2 / 100
         
         # 初始化交易所
         self.exchange = self._init_exchange()
