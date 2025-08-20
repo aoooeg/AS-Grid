@@ -65,6 +65,24 @@
 - **Order Timeout Management**: Automatic cancellation of pending orders exceeding 300 seconds
 - **Real-time Monitoring**: WebSocket data streams for instant market response
 
+### 🚨 Emergency Position Reduction System
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **Emergency Trigger** | Automatically triggers when both long/short positions ≥ 0.8× threshold | Prevents excessive risk exposure during market volatility |
+| **Dynamic Thresholds** | Adjusts to 0.75× threshold during extreme volatility | Enhanced protection during market crashes |
+| **Batched Reduction** | Executes reduction in configurable batches with millisecond intervals | Minimizes market impact and ensures execution |
+| **Smart Order Types** | Prioritizes limit orders with slippage tolerance, falls back to market orders | Optimizes execution price while ensuring completion |
+| **Cooldown Protection** | 60-second cooldown prevents rapid re-triggering | Avoids excessive trading during volatile periods |
+| **Daily Circuit Breaker** | Halts new positions after 3 daily triggers | Ultimate risk protection for extreme market conditions |
+
+### 🔒 Lockdown Mode (装死模式)
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **Single-Side Protection** | Activates when single direction exceeds 1× threshold | Prevents excessive exposure in one direction |
+| **Fixed Take-Profit** | Uses calculated take-profit price instead of dynamic adjustment | Maintains profit targets during high-risk periods |
+| **Order Management** | Stops opening new positions, only maintains take-profit orders | Reduces risk while preserving profit opportunities |
+| **Smart Exit** | Automatically exits when position returns below threshold | Dynamic risk management based on market conditions |
+
 ### 🔧 Smart Features
 - **Dynamic Grid Adjustment**: Grid spacing optimization based on market conditions
 - **Automatic Spread Correction**: Grid realignment when price spreads exceed thresholds
@@ -323,6 +341,24 @@ PRICE_SPREAD_THRESHOLD=0.0004  # Spread threshold (10% of grid spacing)
 PRICE_SPREAD_CHECK_INTERVAL=30 # Spread check interval (seconds)
 ```
 
+#### Emergency Position Reduction Configuration
+```bash
+# Emergency Reduction Thresholds
+EMG_ENTER_RATIO=0.80     # Emergency trigger ratio (0.8× threshold)
+EMG_EXIT_RATIO=0.75      # Emergency exit ratio (0.75× threshold)
+EMG_COOLDOWN_S=60        # Cooldown period after trigger (seconds)
+EMG_BATCHES=2            # Number of reduction batches
+EMG_BATCH_SLEEP_MS=300   # Interval between batches (milliseconds)
+EMG_SLIP_CAP_BP=15       # Slippage tolerance for limit orders (basis points)
+EMG_DAILY_FUSE_COUNT=3   # Daily circuit breaker trigger count
+
+# Grid Pause & Parameter Recovery
+GRID_PAUSE_AFTER_EMG_S=90    # Grid pause duration after emergency (seconds)
+EMG_QUANTITY_RATIO=0.70      # Temporary quantity reduction ratio
+EMG_GRID_SPACING_RATIO=1.30  # Temporary grid spacing increase ratio
+EMG_PARAM_RECOVER_INTERVAL=300  # Parameter recovery interval (seconds)
+```
+
 ### Multi-Currency Configuration
 
 Create `config/symbols.yaml` for multi-currency mode:
@@ -398,6 +434,40 @@ tail -f log/status_summary.log    # Status summary
 - **Spread Monitoring**: Real-time monitoring with automatic correction
 - **Order Management**: Timeout handling and cooldown mechanisms
 - **Inventory Control**: Bidirectional position balance management
+
+### 🚨 Emergency Position Reduction Logic
+1. **Trigger Conditions**:
+   - **Normal Mode**: Triggers when both long/short positions ≥ 0.8× `POSITION_THRESHOLD`
+   - **Extreme Volatility**: Automatically adjusts to 0.75× threshold during high volatility periods
+   - **Volatility Detection**: Monitors price changes over 60 periods to identify extreme conditions
+
+2. **Execution Process**:
+   - **Order Cancellation**: Cancels all non-take-profit orders for affected directions
+   - **Batched Reduction**: Divides reduction into configurable batches (default: 2 batches)
+   - **Smart Ordering**: Attempts limit orders with slippage tolerance, falls back to market orders
+   - **Position Refresh**: Refreshes positions before each batch to ensure accuracy
+
+3. **Post-Reduction Actions**:
+   - **Grid Pause**: Pauses new grid orders for 60-120 seconds
+   - **Parameter Adjustment**: Temporarily reduces quantity to 70% and increases grid spacing to 130%
+   - **Gradual Recovery**: Automatically recovers parameters every 5 minutes (10% increments)
+   - **Daily Circuit Breaker**: Activates after 3 daily triggers, halting new positions for the day
+
+### 🔒 Lockdown Mode Logic
+1. **Activation Conditions**:
+   - **Single Direction**: Triggers when long or short position exceeds 1× `POSITION_THRESHOLD`
+   - **Take-Profit Calculation**: Computes optimal take-profit price based on position ratios
+   - **Price Constraints**: Applies min/max constraints to prevent extreme take-profit levels
+
+2. **Operation Mode**:
+   - **Position Freeze**: Stops opening new positions in the affected direction
+   - **Fixed Take-Profit**: Maintains take-profit orders at calculated price levels
+   - **Order Management**: Only places take-profit orders, no new entry orders
+
+3. **Exit Conditions**:
+   - **Automatic Exit**: Exits lockdown mode when position returns below 1× threshold
+   - **Normal Operation**: Resumes standard grid trading operations
+   - **State Reset**: Clears lockdown mode flags and take-profit price records
 
 ## 🐳 Docker Architecture
 
@@ -520,6 +590,12 @@ For issues and questions:
 - Leveraged trading is extremely risky and may result in total capital loss
 - Ensure full understanding of trading mechanisms before use
 - Consider setting stop-loss mechanisms to avoid major losses in extreme situations
+
+**🚨 Emergency System Considerations**:
+- **Emergency Reduction**: May trigger during high volatility, resulting in position closures
+- **Lockdown Mode**: Can pause trading in one direction, affecting overall strategy performance
+- **Parameter Changes**: Temporary adjustments may impact profit potential during recovery periods
+- **Daily Circuit Breaker**: Extreme protection may halt all new positions for extended periods
 
 **📊 Risk Management Tips**:
 - Start with small amounts and gradually increase

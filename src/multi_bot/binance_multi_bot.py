@@ -117,6 +117,31 @@ class BinanceGridBot:
         self._get_price_precision()
         
         # 初始化状态变量
+        # === 紧急减仓配置与状态（Simple Plan, Fixed Quantity） ===
+        self.emg_enter_ratio = float(self.config.get('emg_enter_ratio', 0.80))
+        self.emg_exit_ratio  = float(self.config.get('emg_exit_ratio', 0.75))
+        self.enable_dynamic_enter_075 = bool(self.config.get('enable_dynamic_enter_075', True))
+        self.emg_cooldown_s  = int(self.config.get('emg_cooldown_s', 60))
+        self.grid_pause_after_emg_s = int(self.config.get('grid_pause_after_emg_s', 90))
+        self.emg_batches     = int(self.config.get('emg_batches', 2))
+        self.emg_batch_sleep_ms = int(self.config.get('emg_batch_sleep_ms', 300))
+        self.emg_slip_cap_bp = int(self.config.get('emg_slip_cap_bp', 15))
+        self.emg_daily_fuse_count = int(self.config.get('emg_daily_fuse_count', 3))
+
+        self._emg_last_ts = 0.0
+        self._emg_in_progress = False
+        self._emg_trigger_count_today = 0
+        self._grid_pause_until_ts = 0.0
+        self._day_fuse_on = False
+        self._emg_day = time.strftime('%Y-%m-%d')
+
+        self._initial_quantity_base = self.initial_quantity
+        self._grid_spacing_base = self.grid_spacing
+        self._last_param_recover_ts = 0.0
+
+        from collections import deque
+        self._vol_prices = deque(maxlen=60)
+
         self.long_initial_quantity = 0
         self.short_initial_quantity = 0
         self.long_position = 0
@@ -917,7 +942,7 @@ class BinanceGridBot:
         # 先按精度 round
         price = round(float(price), self.price_precision)
 
-        # 如果已有“同价位”的止盈单则跳过（使用 round 后的严格相等判断）
+        # 如果已有"同价位"的止盈单则跳过（使用 round 后的严格相等判断）
         orders = self.exchange.fetch_open_orders(ccxt_symbol)
         for order in orders:
             pos = order['info'].get('positionSide')
@@ -1119,23 +1144,62 @@ class BinanceGridBot:
             logger.info("更新 short 中间价")
 
     async def _check_risk(self):
-        """检查持仓并减少库存风险"""
-        await self._check_and_notify_risk_reduction()
+        """检查持仓并减少库存风险（紧急减仓：固定数量 + 冷却 + 暂停网格 + 退出滞后）"""
+        self._reset_emg_daily_counter_if_new_day()
+        if self._day_fuse_on:
+            return
 
-        local_position_threshold = self.position_threshold * 0.8
-        quantity = self.position_threshold * 0.1
+        enter_ratio = self.emg_enter_ratio
+        if self.enable_dynamic_enter_075 and self._is_extreme_vol():
+            enter_ratio = min(enter_ratio, 0.75)
 
-        if self.long_position >= local_position_threshold and self.short_position >= local_position_threshold:
-            logger.info(f"多头和空头持仓均超过阈值 {local_position_threshold}，开始双向平仓，减少库存风险")
-            if self.long_position > 0:
-                self._place_order('sell', price=None, quantity=quantity, is_reduce_only=True, position_side='long',
-                                 order_type='market')
-                logger.info(f"市价平仓多头 {quantity} 个")
+        T = self.position_threshold
+        now = time.time()
 
-            if self.short_position > 0:
-                self._place_order('buy', price=None, quantity=quantity, is_reduce_only=True, position_side='short',
-                                 order_type='market')
-                logger.info(f"市价平仓空头 {quantity} 个")
+        if self._emg_in_progress:
+            if (self.long_position < self.emg_exit_ratio * T and
+                self.short_position < self.emg_exit_ratio * T and
+                now >= self._grid_pause_until_ts):
+                self._emg_in_progress = False
+                logger.info(f"[EMG][{self.symbol}] 退出紧急态：多空均低于 {self.emg_exit_ratio:.2f}T")
+                # 发送退出紧急状态通知
+                await self._send_emergency_exit_notification()
+            return
+
+        if (self.long_position >= enter_ratio * T and
+            self.short_position >= enter_ratio * T and
+            (now - self._emg_last_ts >= self.emg_cooldown_s)):
+            self._emg_in_progress = True
+            self._emg_last_ts = now
+            self._grid_pause_until_ts = now + self.grid_pause_after_emg_s
+            self._emg_trigger_count_today += 1
+            logger.info(f"[EMG][{self.symbol}] 进入紧急减仓：阈值 {enter_ratio:.2f}T，冷却 {self.emg_cooldown_s}s，暂停网格 {self.grid_pause_after_emg_s}s")
+            
+            # 发送进入紧急状态通知
+            await self._send_emergency_enter_notification(enter_ratio)
+
+            if self._emg_trigger_count_today >= self.emg_daily_fuse_count:
+                self._enter_day_fuse_mode()
+                # 发送日内封盘通知
+                await self._send_daily_fuse_notification()
+                return
+
+            try:
+                self._cancel_open_orders_for_side('long')
+                self._cancel_open_orders_for_side('short')
+            except Exception as e:
+                logger.warning(f"[EMG] 撤开仓挂单异常：{e}")
+
+            fixed_qty = max(self.min_order_amount, round(self.position_threshold * 0.1, self.amount_precision))
+            long_cut  = min(fixed_qty, max(0.0, self.long_position))
+            short_cut = min(fixed_qty, max(0.0, self.short_position))
+
+            if long_cut > 0:
+                await self._emg_reduce_side_batched('long', long_cut)
+            if short_cut > 0:
+                await self._emg_reduce_side_batched('short', short_cut)
+
+            self._apply_temp_param_cooling()
 
     async def _grid_loop(self):
         """核心网格交易循环"""
@@ -1144,6 +1208,23 @@ class BinanceGridBot:
         await self._check_and_notify_double_profit('long', self.long_position)
         await self._check_and_notify_double_profit('short', self.short_position)
         await self._check_risk()
+
+        # 记录价格与风控辅助
+        self._record_price(self.latest_price)
+        self._recover_params_if_needed()
+        self._reset_emg_daily_counter_if_new_day()
+
+        # 暂停窗口或封盘：不再开新网格/初始化
+        if time.time() < self._grid_pause_until_ts or self._day_fuse_on:
+            # 避免重复记录暂停日志
+            if not hasattr(self, '_last_pause_log_ts') or time.time() - getattr(self, '_last_pause_log_ts', 0) > 60:
+                self._last_pause_log_ts = time.time()
+                if self._day_fuse_on:
+                    logger.info('[EMG] 日内封盘模式开启，跳过本轮开仓/挂单')
+                else:
+                    remaining_time = self._grid_pause_until_ts - time.time()
+                    logger.info(f'[EMG] 暂停窗口开启，剩余暂停时间: {remaining_time:.0f}秒，跳过本轮开仓/挂单')
+            return
 
         current_time = time.time()
         
@@ -1168,7 +1249,7 @@ class BinanceGridBot:
                 else:
                     await self._place_short_orders(self.latest_price)
     
-    # ===== 新增：只撤“开仓”挂单，保留 reduceOnly 的止盈挂单 =====
+    # ===== 新增：只撤"开仓"挂单，保留 reduceOnly 的止盈挂单 =====
     def _cancel_open_orders_for_side(self, position_side: str):
         """仅撤销某个方向的开仓挂单（reduceOnly=False），保留止盈单"""
         orders = self.exchange.fetch_open_orders(self.ccxt_symbol)
@@ -1261,7 +1342,7 @@ class BinanceGridBot:
     # ===== 新增：装死分支的 r 限幅计算 =====
     def _compute_tp_multiplier(self, side: str) -> float:
         """
-        计算在“装死”状态下用于调整止盈价的倍数 r，并做上下限约束：
+        计算在"装死"状态下用于调整止盈价的倍数 r，并做上下限约束：
         下限= max(1 + grid_spacing, 1.01)，上限= min(1 + 3*grid_spacing, 1.05)
         """
         if side == 'long':
@@ -1318,9 +1399,391 @@ class BinanceGridBot:
             await self._send_error_notification(str(e), "启动失败")
             raise e
 
+    # === 紧急减仓：辅助方法（固定数量版） ===
+    def _reset_emg_daily_counter_if_new_day(self):
+        day = time.strftime('%Y-%m-%d')
+        if day != self._emg_day:
+            self._emg_day = day
+            self._emg_trigger_count_today = 0
+            self._day_fuse_on = False
+
+    def _enter_day_fuse_mode(self):
+        self._day_fuse_on = True
+        try:
+            self._cancel_open_orders_for_side('long')
+            self._cancel_open_orders_for_side('short')
+        except Exception as e:
+            logger.warning(f"[EMG] 进入封盘时撤单异常: {e}")
+        logger.warning(f"[EMG][{self.symbol}] 日内触发≥{self.emg_daily_fuse_count}次，封盘：仅保留reduceOnly止盈/止损")
+
+    def _apply_temp_param_cooling(self):
+        try:
+            base_q = getattr(self, '_initial_quantity_base', self.initial_quantity)
+            base_g = getattr(self, '_grid_spacing_base', self.grid_spacing)
+            self.initial_quantity = max(self.min_order_amount, round(base_q * 0.7, self.amount_precision))
+            self.grid_spacing     = base_g * 1.3
+            self._last_param_recover_ts = time.time()
+            logger.info(f"[EMG] 临时降参：initial_quantity→{self.initial_quantity}, grid_spacing→{self.grid_spacing:.6f}")
+        except Exception as e:
+            logger.warning(f"[EMG] 降参失败: {e}")
+
+    def _recover_params_if_needed(self):
+        if self._last_param_recover_ts == 0:
+            return
+        if time.time() - self._last_param_recover_ts < 300:
+            return
+        base_q = getattr(self, '_initial_quantity_base', self.initial_quantity)
+        base_g = getattr(self, '_grid_spacing_base', self.grid_spacing)
+        try:
+            new_q = min(base_q, round(self.initial_quantity * 1.1, self.amount_precision))
+            new_g = max(base_g, self.grid_spacing / 1.1)
+            
+            # 计算恢复进度
+            q_progress = (new_q - base_q * 0.7) / (base_q - base_q * 0.7) * 100 if base_q > base_q * 0.7 else 100
+            g_progress = (base_g * 1.3 - new_g) / (base_g * 1.3 - base_g) * 100 if base_g * 1.3 > base_g else 100
+            
+            self.initial_quantity = new_q
+            self.grid_spacing     = new_g
+            self._last_param_recover_ts = time.time()
+            
+            # 检查是否完全恢复
+            if abs(new_q - base_q) < 0.01 and abs(new_g - base_g) < 0.000001:
+                logger.info(f"[EMG] 参数已完全恢复：initial_quantity→{self.initial_quantity}, grid_spacing→{self.grid_spacing:.6f}")
+                self._last_param_recover_ts = 0  # 重置，避免重复检查
+                # 发送参数完全恢复通知
+                asyncio.create_task(self._send_param_recovery_complete_notification())
+            else:
+                # 只在重要进度节点发送通知，避免过于频繁
+                current_progress = min(q_progress, g_progress)
+                if not hasattr(self, '_last_progress_notification') or current_progress - getattr(self, '_last_progress_notification', 0) >= 25:
+                    # 每25%进度发送一次通知
+                    self._last_progress_notification = current_progress
+                    asyncio.create_task(self._send_param_recovery_progress_notification(q_progress, g_progress))
+                    # 只在发送通知时记录日志，避免重复
+                    logger.info(f"[EMG] 参数恢复进度 - 下单量: {q_progress:.1f}%, 网格间距: {g_progress:.1f}%")
+                
+        except Exception as e:
+            logger.warning(f"[EMG] 参数恢复失败: {e}")
+
+    def _record_price(self, price: float):
+        try:
+            if price and price > 0:
+                self._vol_prices.append(float(price))
+        except Exception:
+            pass
+
+    def _is_extreme_vol(self) -> bool:
+        if len(self._vol_prices) < 10:
+            return False
+        hi = max(self._vol_prices)
+        lo = min(self._vol_prices)
+        mid = (hi + lo) / 2.0 if (hi + lo) else 0.0
+        if mid == 0:
+            return False
+        
+        volatility = (hi - lo) / mid
+        is_extreme = volatility >= 0.006
+        
+        if is_extreme:
+            # 避免重复通知，只在波动率变化显著时通知，并增加时间间隔控制
+            current_time = time.time()
+            if (not hasattr(self, '_last_volatility_notification') or 
+                abs(volatility - getattr(self, '_last_volatility_notification', 0)) >= 0.002 or
+                current_time - getattr(self, '_last_volatility_time', 0) >= 300):  # 至少5分钟间隔
+                self._last_volatility_notification = volatility
+                self._last_volatility_time = current_time
+                logger.info(f"[EMG] 检测到极端波动：最高价={hi:.8f}, 最低价={lo:.8f}, 波动率={volatility:.4f} ({volatility*100:.2f}%)")
+        
+        return is_extreme
+
+    async def _emg_reduce_side_batched(self, side: str, qty_total: float):
+        batches = max(1, int(self.emg_batches))
+        if batches == 1:
+            parts = [qty_total]
+        else:
+            base = qty_total / batches
+            parts = [round(base, self.amount_precision)] * (batches - 1)
+            last = max(self.min_order_amount, qty_total - sum(parts))
+            parts.append(last)
+
+        logger.info(f"[EMG] 开始执行{side}方向减仓，总数量: {qty_total}，分{len(parts)}批")
+        
+        # 发送减仓开始通知
+        await self._send_reduction_start_notification(side, qty_total, len(parts))
+
+        for i, part in enumerate(parts, 1):
+            try:
+                lp, sp = self._get_position()
+                if lp is not None:
+                    self.long_position = lp
+                if sp is not None:
+                    self.short_position = sp
+            except Exception:
+                pass
+
+            if side == 'long' and self.long_position < self.emg_exit_ratio * self.position_threshold:
+                logger.info(f"[EMG] {side}方向仓位已降至安全区，停止减仓")
+                # 发送提前完成通知
+                await self._send_reduction_early_complete_notification(side, i-1, len(parts))
+                break
+            if side == 'short' and self.short_position < self.emg_exit_ratio * self.position_threshold:
+                logger.info(f"[EMG] {side}方向仓位已降至安全区，停止减仓")
+                # 发送提前完成通知
+                await self._send_reduction_early_complete_notification(side, i-1, len(parts))
+                break
+
+            ok = False
+            try:
+                bid, ask = self._get_best_quotes()
+                slip = self.emg_slip_cap_bp / 10000.0
+                if side == 'long' and bid:
+                    limit_price = bid * (1 - slip)
+                    self._place_order('sell', price=limit_price, quantity=part, is_reduce_only=True, position_side='long', order_type='limit')
+                    ok = True
+                    # 减少日志频率，只在关键批次记录
+                    if i == 1 or i == len(parts):
+                        logger.info(f"[EMG] {side}方向第{i}批限价减仓成功: 卖出{part}张 @ {limit_price:.8f}")
+                elif side == 'short' and ask:
+                    limit_price = ask * (1 + slip)
+                    self._place_order('buy', price=limit_price, quantity=part, is_reduce_only=True, position_side='short', order_type='limit')
+                    ok = True
+                    # 减少日志频率，只在关键批次记录
+                    if i == 1 or i == len(parts):
+                        logger.info(f"[EMG] {side}方向第{i}批限价减仓成功: 买入{part}张 @ {limit_price:.8f}")
+            except Exception as e:
+                logger.warning(f"[EMG] 限价减仓异常（{side} 第{i}批）：{e}")
+
+            if not ok:
+                try:
+                    if side == 'long':
+                        self._place_order('sell', price=None, quantity=part, is_reduce_only=True, position_side='long', order_type='market')
+                        logger.info(f"[EMG] {side}方向第{i}批市价减仓成功: 卖出{part}张")
+                    else:
+                        self._place_order('buy', price=None, quantity=part, is_reduce_only=True, position_side='short', order_type='market')
+                        logger.info(f"[EMG] {side}方向第{i}批市价减仓成功: 买入{part}张")
+                except Exception as e:
+                    logger.error(f"[EMG] 市价减仓失败（{side} 第{i}批）：{e}")
+
+            # 修复异步问题：使用asyncio.sleep替代time.sleep
+            if i < len(parts):  # 最后一批不需要等待
+                await asyncio.sleep(self.emg_batch_sleep_ms / 1000.0)
+        
+        # 发送减仓完成通知
+        await self._send_reduction_complete_notification(side, qty_total, len(parts))
+
+    def _get_best_quotes(self):
+        try:
+            t = self.exchange.fetch_ticker(self.ccxt_symbol)
+            bid = t.get('bid') or t.get('info', {}).get('bidPrice')
+            ask = t.get('ask') or t.get('info', {}).get('askPrice')
+            return float(bid) if bid else None, float(ask) if ask else None
+        except Exception as e:
+            logger.warning(f"[EMG] 获取报价失败: {e}")
+            return None, None
+
     def stop(self):
         """停止机器人"""
         logger.info("正在停止机器人...")
         self.running = False
         # 发送停止通知
         asyncio.create_task(self._send_telegram_message("🛑 **机器人已手动停止**\n\n用户主动停止了网格交易机器人", urgent=False, silent=True))
+
+    async def _send_daily_circuit_breaker_notification(self):
+        """发送日内封盘通知"""
+        message = f"""
+🚫 **日内封盘模式启动**
+
+⚠️ **触发条件**
+• 当日紧急减仓次数: {self.emergency_mode['daily_trigger_count']} 次
+• 已达到最大允许次数: 3次
+
+🛑 **限制措施**
+• 当日不再开新仓
+• 只保留现有止盈单
+• 次日零点自动重置
+
+📊 **风险提示**
+• 市场波动较大，建议谨慎操作
+• 可考虑手动调整策略参数
+"""
+        await self._send_telegram_message(message, urgent=True)
+    
+    async def _send_emergency_enter_notification(self, enter_ratio):
+        """发送进入紧急减仓状态通知"""
+        message = f"""
+🚨 **紧急减仓触发**
+
+📊 **持仓状况**
+• 币种: {self.symbol}
+• 多头持仓: {self.long_position} 张
+• 空头持仓: {self.short_position} 张
+• 触发阈值: {enter_ratio:.2f} × {self.position_threshold:.2f} = {enter_ratio * self.position_threshold:.2f}
+
+⚡ **执行措施**
+• 撤销所有开仓挂单
+• 分批执行减仓操作
+• 暂停网格开仓 {self.grid_pause_after_emg_s} 秒
+• 临时调整参数：下单量70%，网格间距1.3倍
+
+📈 **当日统计**
+• 第 {self._emg_trigger_count_today} 次触发
+• 冷却期: {self.emg_cooldown_s} 秒
+• 剩余触发次数: {self.emg_daily_fuse_count - self._emg_trigger_count_today} 次
+
+⏰ **触发时间**: {time.strftime("%Y-%m-%d %H:%M:%S")}
+"""
+        await self._send_telegram_message(message, urgent=True)
+    
+    async def _send_emergency_exit_notification(self):
+        """发送退出紧急减仓状态通知"""
+        message = f"""
+✅ **紧急减仓状态解除**
+
+📊 **当前持仓**
+• 币种: {self.symbol}
+• 多头持仓: {self.long_position} 张
+• 空头持仓: {self.short_position} 张
+• 安全阈值: {self.emg_exit_ratio:.2f} × {self.position_threshold:.2f} = {self.emg_exit_ratio * self.position_threshold:.2f}
+
+🔄 **参数恢复**
+• 开始逐步恢复原始参数
+• 每5分钟恢复10%
+• 预计恢复时间: 15-20分钟
+
+📈 **当日统计**
+• 已触发 {self._emg_trigger_count_today} 次
+• 剩余触发次数: {self.emg_daily_fuse_count - self._emg_trigger_count_today} 次
+
+⏰ **解除时间**: {time.strftime("%Y-%m-%d %H:%M:%S")}
+"""
+        await self._send_telegram_message(message, urgent=False)
+    
+    async def _send_daily_fuse_notification(self):
+        """发送日内封盘通知"""
+        message = f"""
+🚫 **日内封盘模式启动**
+
+⚠️ **触发条件**
+• 币种: {self.symbol}
+• 当日紧急减仓次数: {self._emg_trigger_count_today} 次
+• 已达到最大允许次数: {self.emg_daily_fuse_count} 次
+
+🛑 **限制措施**
+• 当日不再开新仓
+• 只保留现有止盈单
+• 次日零点自动重置
+
+📊 **风险提示**
+• 市场波动较大，建议谨慎操作
+• 可考虑手动调整策略参数
+• 建议检查市场状况和策略设置
+
+⏰ **封盘时间**: {time.strftime("%Y-%m-%d %H:%M:%S")}
+"""
+        await self._send_telegram_message(message, urgent=True)
+    
+    async def _send_reduction_start_notification(self, side: str, qty_total: float, batch_count: int):
+        """发送减仓开始通知"""
+        side_name = "多头" if side == 'long' else "空头"
+        action = "卖出" if side == 'long' else "买入"
+        
+        message = f"""
+🔄 **紧急减仓开始**
+
+📊 **减仓信息**
+• 币种: {self.symbol}
+• 方向: {side_name}
+• 总数量: {qty_total} 张
+• 批次: {batch_count} 批
+• 动作: {action}
+
+⚡ **执行策略**
+• 优先限价单（滑点容忍: {self.emg_slip_cap_bp} 基点）
+• 限价单失败时使用市价单
+• 每批间隔: {self.emg_batch_sleep_ms} 毫秒
+
+⏰ **开始时间**: {time.strftime("%Y-%m-%d %H:%M:%S")}
+"""
+        await self._send_telegram_message(message, urgent=False)
+    
+    async def _send_reduction_early_complete_notification(self, side: str, completed_batches: int, total_batches: int):
+        """发送减仓提前完成通知"""
+        side_name = "多头" if side == 'long' else "空头"
+        
+        message = f"""
+✅ **紧急减仓提前完成**
+
+📊 **完成情况**
+• 币种: {self.symbol}
+• 方向: {side_name}
+• 已完成批次: {completed_batches}/{total_batches}
+• 完成原因: 仓位已降至安全区
+
+🎯 **安全状态**
+• 当前仓位已低于退出阈值
+• 无需继续减仓操作
+• 系统将开始参数恢复流程
+
+⏰ **完成时间**: {time.strftime("%Y-%m-%d %H:%M:%S")}
+"""
+        await self._send_telegram_message(message, urgent=False)
+    
+    async def _send_reduction_complete_notification(self, side: str, qty_total: float, batch_count: int):
+        """发送减仓完成通知"""
+        side_name = "多头" if side == 'long' else "空头"
+        action = "卖出" if side == 'long' else "买入"
+        
+        message = f"""
+✅ **紧急减仓执行完成**
+
+📊 **执行结果**
+• 币种: {self.symbol}
+• 方向: {side_name}
+• 总数量: {qty_total} 张
+• 批次: {batch_count} 批
+• 动作: {action}
+
+🔄 **后续流程**
+• 减仓操作已完成
+• 系统将开始参数恢复
+• 网格开仓将继续暂停
+
+⏰ **完成时间**: {time.strftime("%Y-%m-%d %H:%M:%S")}
+"""
+        await self._send_telegram_message(message, urgent=False)
+    
+    async def _send_param_recovery_progress_notification(self, q_progress: float, g_progress: float):
+        """发送参数恢复进度通知"""
+        message = f"""
+🔄 **参数恢复进度**
+
+📊 **恢复状态**
+• 币种: {self.symbol}
+• 下单量: {q_progress:.1f}%
+• 网格间距: {g_progress:.1f}%
+
+⏰ **下次更新**: 5分钟后
+"""
+        await self._send_telegram_message(message, urgent=False, silent=True)
+    
+    async def _send_param_recovery_complete_notification(self):
+        """发送参数完全恢复通知"""
+        base_q = getattr(self, '_initial_quantity_base', self.initial_quantity)
+        base_g = getattr(self, '_grid_spacing_base', self.grid_spacing)
+        
+        message = f"""
+✅ **参数恢复完成**
+
+📊 **恢复结果**
+• 币种: {self.symbol}
+• 下单量: {self.initial_quantity} → {base_q} 张
+• 网格间距: {self.grid_spacing:.6f} → {base_g:.6f}
+
+🎯 **系统状态**
+• 所有参数已恢复到原始值
+• 紧急减仓机制已完全退出
+• 网格交易恢复正常运行
+
+⏰ **完成时间**: {time.strftime("%Y-%m-%d %H:%M:%S")}
+"""
+        await self._send_telegram_message(message, urgent=False)
