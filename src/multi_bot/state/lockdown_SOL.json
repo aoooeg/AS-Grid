@@ -1,0 +1,4 @@
+{
+    "long":  { "active": false, "lockdown_price": null },
+    "short": { "active": true,  "lockdown_price": 188.0465 }
+}
