@@ -82,7 +82,9 @@ class CustomBinance(ccxt.binance):
 class BinanceGridBot:
     # ===== 持久化：仅用本地文件恢复装死状态 =====
     def _state_file_path(self):
-        state_dir = os.path.join("src", "multi_bot", "state")
+        # 获取项目根目录的绝对路径
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        state_dir = os.path.join(project_root, "src", "multi_bot", "state")
         os.makedirs(state_dir, exist_ok=True)
         safe_symbol = str(self.symbol).replace("USDT", "").replace("USDC", "")
         return os.path.join(state_dir, f"lockdown_{safe_symbol}.json")
@@ -1478,11 +1480,9 @@ class BinanceGridBot:
                 existing_price = round(float(existing['price']), self.price_precision)
                 target_price_rounded = round(float(target_price), self.price_precision)
                 
-                if existing_price != target_price_rounded:
-                    logger.warning(f"装死模式止盈单价格不一致！现有: {existing_price}, 固定目标: {target_price_rounded}")
+                if existing_price != target_price_rounded:                    
                     # 在装死模式下，如果价格不一致，强制撤单并重新挂单
                     self._cancel_order(existing['id'])
-                    logger.info(f"装死模式：撤单并重新挂出固定止盈价: {target_price_rounded}")
                     self._place_take_profit_order(self.ccxt_symbol, side, target_price, quantity)
                     return True
                 else:
@@ -1533,7 +1533,6 @@ class BinanceGridBot:
             return
             
         if self.lockdown_mode[side]['active']:
-            logger.info(f"装死模式状态 - {side}: 激活中, 固定止盈价: {self.lockdown_mode[side]['tp_price']}, 装死基准价: {self.lockdown_mode[side]['lockdown_price']}")
             # 更新最后记录时间
             self._last_lockdown_log_time[side] = current_time
         else:
