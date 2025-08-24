@@ -31,6 +31,7 @@ services:
       - ../config/.env:/app/.env:ro  # 环境变量文件
       - ../config/symbols.yaml:/app/config/symbols.yaml:ro  # 多币种配置文件
       - ../config/symbols.json:/app/config/symbols.json:ro  # 多币种配置文件（可选）
+      - ../src/multi_bot/state:/app/src/multi_bot/state  # 装死状态文件目录
     
     # 网络配置
     networks:

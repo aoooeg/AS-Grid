@@ -52,6 +52,7 @@ check_env_file() {
 create_directories() {
     print_info "创建必要的目录..."
     mkdir -p log
+    mkdir -p src/multi_bot/state
 }
 
 build_image() {
