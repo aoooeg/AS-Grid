@@ -1126,6 +1126,22 @@ class BinanceGridBot:
                     else:
                         logger.info(f"持仓{self.long_position}超过极限阈值 {self.position_threshold}，long装死")
                     
+                    # 如果未处于装死模式，则进入装死模式
+                    if not self.lockdown_mode['long']['active']:
+                        # 进入装死模式：设置装死价格和止盈价格
+                        self.lockdown_mode['long']['active'] = True
+                        self.lockdown_mode['long']['lockdown_price'] = latest_price
+                        
+                        # 计算止盈价格
+                        r = self._compute_tp_multiplier('long')
+                        tp_price = latest_price * r
+                        self.lockdown_mode['long']['tp_price'] = tp_price
+                        self.lockdown_mode['long']['r'] = r
+                        
+                        # 持久化装死状态
+                        self._persist_lockdown_state()
+                        logger.info(f"多头进入装死模式，固定止盈价: {tp_price:.5f} (基于装死价格: {latest_price:.5f})")
+                    
                     # 检查是否已处于装死模式
                     if not self.lockdown_mode['long']['active']:
                         logger.warning("多头持仓超过阈值但未处于装死模式，请检查本地装死状态文件")
@@ -1209,6 +1225,22 @@ class BinanceGridBot:
                         threshold_logger.log_threshold_status(self.symbol, 'short', self.short_position, self.position_threshold, True)
                     else:
                         logger.info(f"持仓{self.short_position}超过极限阈值 {self.position_threshold}，short 装死")
+                    
+                    # 如果未处于装死模式，则进入装死模式
+                    if not self.lockdown_mode['short']['active']:
+                        # 进入装死模式：设置装死价格和止盈价格
+                        self.lockdown_mode['short']['active'] = True
+                        self.lockdown_mode['short']['lockdown_price'] = latest_price
+                        
+                        # 计算止盈价格
+                        r = self._compute_tp_multiplier('short')
+                        tp_price = latest_price / r
+                        self.lockdown_mode['short']['tp_price'] = tp_price
+                        self.lockdown_mode['short']['r'] = r
+                        
+                        # 持久化装死状态
+                        self._persist_lockdown_state()
+                        logger.info(f"空头进入装死模式，固定止盈价: {tp_price:.5f} (基于装死价格: {latest_price:.5f})")
                     
                     # 检查是否已处于装死模式
                     if not self.lockdown_mode['short']['active']:
