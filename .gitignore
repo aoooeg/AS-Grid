@@ -143,6 +143,10 @@ log/*.log.*
 log/*.log.gz
 log/*.log.bz2
 
+# 状态文件（运行时生成，不应提交到版本控制）
+src/multi_bot/state/
+src/multi_bot/state/*.json
+
 # 环境变量文件
 .env
 .env.local
