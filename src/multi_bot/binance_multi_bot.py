@@ -87,28 +87,39 @@ class BinanceGridBot:
         safe_symbol = str(self.symbol).replace("USDT", "").replace("USDC", "")
         return os.path.join(state_dir, f"lockdown_{safe_symbol}.json")
 
+
     def _persist_lockdown_state(self):
-        """将当前 lockdown_mode 持久化到本地，仅本地恢复，不依赖交易所订单。"""
+        """将当前 lockdown_mode 持久化到本地，仅本地恢复，不依赖交易所订单。
+        额外持久化每侧的 tp_price 与 r（lockdown 倍率），避免重启后因 r 变化导致的价格漂移。"""
         try:
-            data = {
-                'long': {
-                    'active': bool(self.lockdown_mode.get('long', {}).get('active')),
-                    'lockdown_price': self.lockdown_mode.get('long', {}).get('lockdown_price'),
-                },
-                'short': {
-                    'active': bool(self.lockdown_mode.get('short', {}).get('active')),
-                    'lockdown_price': self.lockdown_mode.get('short', {}).get('lockdown_price'),
-                },
-                'updated_at': time.time()
-            }
-            with open(self._state_file_path(), "w", encoding="utf-8") as f:
+            def _side_payload(side: str):
+                side_state = self.lockdown_mode.get(side, {}) if hasattr(self, 'lockdown_mode') else {}
+                active = bool(side_state.get('active'))
+                lock = side_state.get('lockdown_price')
+                tp = side_state.get('tp_price')
+                r = side_state.get('r') or side_state.get('lockdown_r')
+                # 回填 r：若缺失且 lock/tp 可用则反推
+                try:
+                    if (not r) and lock and tp and float(lock) and float(tp):
+                        lock_f = float(lock); tp_f = float(tp)
+                        r = (tp_f/lock_f) if side == 'long' else (lock_f/tp_f)
+                except Exception:
+                    r = r or None
+                return {'active': active, 'lockdown_price': lock, 'tp_price': tp, 'r': r}
+            data = {'long': _side_payload('long'),
+                    'short': _side_payload('short'),
+                    'updated_at': time.time()}
+            path = self._state_file_path()
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-            if logger: logger.info("已将装死状态写入本地文件")
+            if logger: logger.info(f"已写入装死状态文件: {path} => {data}")
         except Exception as e:
-            if logger: logger.error(f"写入装死状态本地文件失败: {e}")
+            if logger: logger.error(f"持久化装死状态失败: {e}")
 
     def _restore_lockdown_from_local(self):
-        """仅从本地文件恢复装死状态；若无本地记录则不做任何推断。"""
+        """仅从本地文件恢复装死状态；若无本地记录则不做任何推断。
+        恢复时优先使用本地保存的 tp_price 与 r；若缺失则按当前 _compute_tp_multiplier(side) 计算一次，并回写持久化。"""
         try:
             path = self._state_file_path()
             if not os.path.exists(path):
@@ -117,31 +128,69 @@ class BinanceGridBot:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             if logger: logger.info(f"成功读取装死状态文件: {path}, 数据: {data}")
+            changed = False
             for side in ('long', 'short'):
                 pos = self.long_position if side == 'long' else self.short_position
                 if pos is None or self.position_threshold is None:
                     continue
-                if pos > self.position_threshold:
-                    # 仅当仓位超阈值且本地记录 active/lockdown_price 时恢复
-                    side_data = data.get(side, {})
-                    lock = side_data.get('lockdown_price')
-                    active = bool(side_data.get('active'))
-                    if logger: logger.info(f"检查{side}恢复条件: pos={pos}, threshold={self.position_threshold}, active={active}, lock={lock}")
-                    if active and lock:
-                        self.lockdown_mode[side]['active'] = True
-                        self.lockdown_mode[side]['lockdown_price'] = float(lock)
+                if pos <= self.position_threshold:
+                    continue  # 仅当仓位仍超阈值时才恢复装死
+                side_data = data.get(side, {}) or {}
+                active = bool(side_data.get('active'))
+                lock = side_data.get('lockdown_price')
+                tp = side_data.get('tp_price')
+                r = side_data.get('r') or side_data.get('lockdown_r')
+                if not active or lock is None:
+                    continue  # 没有标记为装死，或没有锁仓价，跳过
+
+                # 恢复内存状态
+                self.lockdown_mode[side]['active'] = True
+                self.lockdown_mode[side]['lockdown_price'] = float(lock)
+
+                # 计算/恢复 r 与 tp
+                if r:
+                    try:
+                        r = float(r)
+                    except Exception:
+                        r = None
+                if not r or r <= 1.0:
+                    try:
                         r = float(self._compute_tp_multiplier(side))
-                        # 由锁仓价推导固定止盈价（不读取/不反推交易所订单）
+                    except Exception:
+                        r = 1.01
+                    changed = True  # 我们补齐了 r，稍后回写
+
+                if tp is None:
+                    # 根据 side 与 r 计算
+                    if side == 'long':
+                        tp_calc = self.lockdown_mode[side]['lockdown_price'] * r
+                    else:
+                        tp_calc = self.lockdown_mode[side]['lockdown_price'] / r
+                    tp = float(tp_calc)
+                    changed = True  # 我们补齐了 tp，稍后回写
+                else:
+                    try:
+                        tp = float(tp)
+                    except Exception:
+                        # 无法解析则重新计算
                         if side == 'long':
                             tp = self.lockdown_mode[side]['lockdown_price'] * r
                         else:
                             tp = self.lockdown_mode[side]['lockdown_price'] / r
-                        self.lockdown_mode[side]['tp_price'] = tp
-                        if logger:
-                            logger.info(f"从本地恢复 {side} 装死：lock={self.lockdown_mode[side]['lockdown_price']}, tp={tp}")
+                        changed = True
+
+                self.lockdown_mode[side]['tp_price'] = tp
+                self.lockdown_mode[side]['r'] = r
+
+                if logger:
+                    prec = getattr(self, 'price_precision', 6)
+                    logger.info(f"从本地恢复 {side} 装死：lock={round(self.lockdown_mode[side]['lockdown_price'], prec)}, tp={round(tp, prec)}, r={r}")
+
+            # 如补齐了字段，则回写持久化
+            if changed:
+                self._persist_lockdown_state()
         except Exception as e:
             if logger: logger.error(f"从本地恢复装死状态失败: {e}")
-
     def __init__(self, symbol, api_key, api_secret, config):
         """
         初始化 BinanceGridBot
@@ -1075,18 +1124,16 @@ class BinanceGridBot:
                     else:
                         logger.info(f"持仓{self.long_position}超过极限阈值 {self.position_threshold}，long装死")
                     
-                    # 检查是否刚进入装死模式，记录固定止盈价
+                    # 检查是否已处于装死模式
                     if not self.lockdown_mode['long']['active']:
-                        self.lockdown_mode['long']['active'] = True
-                        # 记录装死时的价格，确保后续不再变化
-                        self.lockdown_mode['long']['lockdown_price'] = self.latest_price
-                        r = self._compute_tp_multiplier('long')
-                        self.lockdown_mode['long']['tp_price'] = self.lockdown_mode['long']['lockdown_price'] * r
-                        # 写入本地持久化，确保重启可恢复
-                        self._persist_lockdown_state()
-                        logger.info(f"多头进入装死模式，固定止盈价: {self.lockdown_mode['long']['tp_price']} (基于装死价格: {self.lockdown_mode['long']['lockdown_price']})")
+                        logger.warning("多头持仓超过阈值但未处于装死模式，请检查本地装死状态文件")
+                        return
                     
-                    # 装死模式下使用固定的止盈价，基于装死时的价格计算
+                    # 装死模式下使用固定的止盈价，基于本地存储的装死价格计算
+                    if self.lockdown_mode['long']['tp_price'] is None:
+                        logger.error("多头装死模式止盈价未设置，请检查本地装死状态文件")
+                        return
+                        
                     fixed_tp_price = self.lockdown_mode['long']['tp_price']
                     placed_any |= self._ensure_lockdown_take_profit(
                         side='long',
@@ -1161,18 +1208,16 @@ class BinanceGridBot:
                     else:
                         logger.info(f"持仓{self.short_position}超过极限阈值 {self.position_threshold}，short 装死")
                     
-                    # 检查是否刚进入装死模式，记录固定止盈价
+                    # 检查是否已处于装死模式
                     if not self.lockdown_mode['short']['active']:
-                        self.lockdown_mode['short']['active'] = True
-                        # 记录装死时的价格，确保后续不再变化
-                        self.lockdown_mode['short']['lockdown_price'] = self.latest_price
-                        r = self._compute_tp_multiplier('short')
-                        self.lockdown_mode['short']['tp_price'] = self.lockdown_mode['short']['lockdown_price'] / r
-                        # 写入本地持久化，确保重启可恢复
-                        self._persist_lockdown_state()
-                        logger.info(f"空头进入装死模式，固定止盈价: {self.lockdown_mode['short']['tp_price']} (基于装死价格: {self.lockdown_mode['short']['lockdown_price']})")
+                        logger.warning("空头持仓超过阈值但未处于装死模式，请检查本地装死状态文件")
+                        return
                     
-                    # 装死模式下使用固定的止盈价，基于装死时的价格计算
+                    # 装死模式下使用固定的止盈价，基于本地存储的装死价格计算
+                    if self.lockdown_mode['short']['tp_price'] is None:
+                        logger.error("空头装死模式止盈价未设置，请检查本地装死状态文件")
+                        return
+                        
                     fixed_tp_price = self.lockdown_mode['short']['tp_price']
                     placed_any |= self._ensure_lockdown_take_profit(
                         side='short',
@@ -1495,28 +1540,42 @@ class BinanceGridBot:
             # 未激活状态不记录，避免日志过多
             pass
 
+
     def _validate_lockdown_integrity(self, side: str) -> bool:
-        """验证装死模式的完整性，确保价格固定逻辑正确"""
+        """验证装死模式的完整性，确保价格固定逻辑正确。
+        注意：若仅存在轻微不一致，将按**本地存储/冻结的 r 与 lock**修正内存 tp，而不是退出装死模式。"""
         if not self.lockdown_mode[side]['active']:
             return True
-            
-        # 检查装死模式的关键数据是否完整
-        if (self.lockdown_mode[side]['tp_price'] is None or 
-            self.lockdown_mode[side]['lockdown_price'] is None):
-            logger.error(f"装死模式数据不完整: {side} - tp_price: {self.lockdown_mode[side]['tp_price']}, lockdown_price: {self.lockdown_mode[side]['lockdown_price']}")
-            return False
-            
-        # 验证止盈价是否基于装死基准价计算
-        if side == 'long':
-            expected_tp = self.lockdown_mode[side]['lockdown_price'] * self._compute_tp_multiplier(side)
+
+        lock = self.lockdown_mode[side].get('lockdown_price')
+        tp = self.lockdown_mode[side].get('tp_price')
+        if lock is None or tp is None:
+            logger.error(f"装死模式数据不完整: {side} - tp_price: {tp}, lockdown_price: {lock}")
+            return False  # 仅在关键数据缺失时返回 False（上层可能会重置，但我们记录明确原因）
+
+        # 选择用于校验的 r：优先使用冻结在本地/内存中的 r，其次使用当前动态 r
+        r = self.lockdown_mode[side].get('r') or self.lockdown_mode[side].get('lockdown_r')
+        try:
+            r = float(r) if r else float(self._compute_tp_multiplier(side))
+        except Exception:
+            r = 1.01
+
+        expected_tp = (lock * r) if side == 'long' else (lock / r)
+
+        # 以价格精度进行比较，避免浮点误差引起的误判
+        prec = getattr(self, 'price_precision', 6)
+        if round(tp, prec) != round(expected_tp, prec):
+            logger.warning(f"装死模式止盈价与冻结参数不一致: {side} - 实际: {tp}, 期望: {expected_tp}, r={r}。将以冻结参数修正内存 tp 并持久化。")
+            # 修正内存与本地
+            self.lockdown_mode[side]['tp_price'] = expected_tp
+            self.lockdown_mode[side]['r'] = r
+            try:
+                self._persist_lockdown_state()
+            except Exception as e:
+                logger.error(f"修正后持久化失败: {e}")
         else:
-            expected_tp = self.lockdown_mode[side]['lockdown_price'] / self._compute_tp_multiplier(side)
-            
-        if abs(self.lockdown_mode[side]['tp_price'] - expected_tp) > 0.000001:
-            logger.error(f"装死模式止盈价计算错误: {side} - 实际: {self.lockdown_mode[side]['tp_price']}, 期望: {expected_tp}")
-            return False
-            
-        logger.debug(f"装死模式完整性验证通过: {side}")
+            logger.debug(f"装死模式完整性验证通过: {side}")
+
         return True
 
     async def start(self):
@@ -1562,7 +1621,6 @@ class BinanceGridBot:
             await self._send_error_notification(str(e), "启动失败")
             raise e
 
-    # === 紧急减仓：辅助方法（固定数量版） ===
     def _reset_emg_daily_counter_if_new_day(self):
         day = time.strftime('%Y-%m-%d')
         if day != self._emg_day:
