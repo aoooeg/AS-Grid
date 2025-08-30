@@ -352,11 +352,8 @@ EMG_BATCH_SLEEP_MS=300   # Interval between batches (milliseconds)
 EMG_SLIP_CAP_BP=15       # Slippage tolerance for limit orders (basis points)
 EMG_DAILY_FUSE_COUNT=3   # Daily circuit breaker trigger count
 
-# Grid Pause & Parameter Recovery
+# Grid Pause
 GRID_PAUSE_AFTER_EMG_S=90    # Grid pause duration after emergency (seconds)
-EMG_QUANTITY_RATIO=0.70      # Temporary quantity reduction ratio
-EMG_GRID_SPACING_RATIO=1.30  # Temporary grid spacing increase ratio
-EMG_PARAM_RECOVER_INTERVAL=300  # Parameter recovery interval (seconds)
 ```
 
 ### Multi-Currency Configuration
@@ -449,8 +446,6 @@ tail -f log/status_summary.log    # Status summary
 
 3. **Post-Reduction Actions**:
    - **Grid Pause**: Pauses new grid orders for 60-120 seconds
-   - **Parameter Adjustment**: Temporarily reduces quantity to 70% and increases grid spacing to 130%
-   - **Gradual Recovery**: Automatically recovers parameters every 5 minutes (10% increments)
    - **Daily Circuit Breaker**: Activates after 3 daily triggers, halting new positions for the day
 
 ### 🔒 Lockdown Mode Logic
@@ -594,7 +589,6 @@ For issues and questions:
 **🚨 Emergency System Considerations**:
 - **Emergency Reduction**: May trigger during high volatility, resulting in position closures
 - **Lockdown Mode**: Can pause trading in one direction, affecting overall strategy performance
-- **Parameter Changes**: Temporary adjustments may impact profit potential during recovery periods
 - **Daily Circuit Breaker**: Extreme protection may halt all new positions for extended periods
 
 **📊 Risk Management Tips**:
