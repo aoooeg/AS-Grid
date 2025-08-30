@@ -330,9 +330,7 @@ class BinanceGridBot:
         self._day_fuse_on = False
         self._emg_day = time.strftime('%Y-%m-%d')
 
-        self._initial_quantity_base = self.initial_quantity
-        self._grid_spacing_base = self.grid_spacing
-        self._last_param_recover_ts = 0.0
+
 
         from collections import deque
         self._vol_prices = deque(maxlen=60)
@@ -1398,7 +1396,7 @@ class BinanceGridBot:
             if short_cut > 0:
                 await self._emg_reduce_side_batched('short', short_cut)
 
-            self._apply_temp_param_cooling()
+
 
     async def _grid_loop(self):
         """核心网格交易循环"""
@@ -1419,7 +1417,7 @@ class BinanceGridBot:
 
         # 记录价格与风控辅助
         self._record_price(self.latest_price)
-        self._recover_params_if_needed()
+
         self._reset_emg_daily_counter_if_new_day()
 
         # 暂停窗口或封盘：不再开新网格/初始化
@@ -1633,54 +1631,9 @@ class BinanceGridBot:
             logger.warning(f"[EMG] 进入封盘时撤单异常: {e}")
         logger.warning(f"[EMG][{self.symbol}] 日内触发≥{self.emg_daily_fuse_count}次，封盘：仅保留reduceOnly止盈/止损")
 
-    def _apply_temp_param_cooling(self):
-        try:
-            base_q = getattr(self, '_initial_quantity_base', self.initial_quantity)
-            base_g = getattr(self, '_grid_spacing_base', self.grid_spacing)
-            self.initial_quantity = max(self.min_order_amount, round(base_q * 0.7, self.amount_precision))
-            self.grid_spacing     = base_g * 1.3
-            self._last_param_recover_ts = time.time()
-            logger.info(f"[EMG] 临时降参：initial_quantity→{self.initial_quantity}, grid_spacing→{self.grid_spacing:.6f}")
-        except Exception as e:
-            logger.warning(f"[EMG] 降参失败: {e}")
 
-    def _recover_params_if_needed(self):
-        if self._last_param_recover_ts == 0:
-            return
-        if time.time() - self._last_param_recover_ts < 300:
-            return
-        base_q = getattr(self, '_initial_quantity_base', self.initial_quantity)
-        base_g = getattr(self, '_grid_spacing_base', self.grid_spacing)
-        try:
-            new_q = min(base_q, round(self.initial_quantity * 1.1, self.amount_precision))
-            new_g = max(base_g, self.grid_spacing / 1.1)
-            
-            # 计算恢复进度
-            q_progress = (new_q - base_q * 0.7) / (base_q - base_q * 0.7) * 100 if base_q > base_q * 0.7 else 100
-            g_progress = (base_g * 1.3 - new_g) / (base_g * 1.3 - base_g) * 100 if base_g * 1.3 > base_g else 100
-            
-            self.initial_quantity = new_q
-            self.grid_spacing     = new_g
-            self._last_param_recover_ts = time.time()
-            
-            # 检查是否完全恢复
-            if abs(new_q - base_q) < 0.01 and abs(new_g - base_g) < 0.000001:
-                logger.info(f"[EMG] 参数已完全恢复：initial_quantity→{self.initial_quantity}, grid_spacing→{self.grid_spacing:.6f}")
-                self._last_param_recover_ts = 0  # 重置，避免重复检查
-                # 发送参数完全恢复通知
-                asyncio.create_task(self._send_param_recovery_complete_notification())
-            else:
-                # 只在重要进度节点发送通知，避免过于频繁
-                current_progress = min(q_progress, g_progress)
-                if not hasattr(self, '_last_progress_notification') or current_progress - getattr(self, '_last_progress_notification', 0) >= 25:
-                    # 每25%进度发送一次通知
-                    self._last_progress_notification = current_progress
-                    asyncio.create_task(self._send_param_recovery_progress_notification(q_progress, g_progress))
-                    # 只在发送通知时记录日志，避免重复
-                    logger.info(f"[EMG] 参数恢复进度 - 下单量: {q_progress:.1f}%, 网格间距: {g_progress:.1f}%")
-                
-        except Exception as e:
-            logger.warning(f"[EMG] 参数恢复失败: {e}")
+
+
 
     def _record_price(self, price: float):
         try:
@@ -2012,38 +1965,3 @@ class BinanceGridBot:
 """
         await self._send_telegram_message(message, urgent=False)
     
-    async def _send_param_recovery_progress_notification(self, q_progress: float, g_progress: float):
-        """发送参数恢复进度通知"""
-        message = f"""
-🔄 **参数恢复进度**
-
-📊 **恢复状态**
-• 币种: {self.symbol}
-• 下单量: {q_progress:.1f}%
-• 网格间距: {g_progress:.1f}%
-
-⏰ **下次更新**: 5分钟后
-"""
-        await self._send_telegram_message(message, urgent=False, silent=True)
-    
-    async def _send_param_recovery_complete_notification(self):
-        """发送参数完全恢复通知"""
-        base_q = getattr(self, '_initial_quantity_base', self.initial_quantity)
-        base_g = getattr(self, '_grid_spacing_base', self.grid_spacing)
-        
-        message = f"""
-✅ **参数恢复完成**
-
-📊 **恢复结果**
-• 币种: {self.symbol}
-• 下单量: {self.initial_quantity} → {base_q} 张
-• 网格间距: {self.grid_spacing:.6f} → {base_g:.6f}
-
-🎯 **系统状态**
-• 所有参数已恢复到原始值
-• 紧急减仓机制已完全退出
-• 网格交易恢复正常运行
-
-⏰ **完成时间**: {time.strftime("%Y-%m-%d %H:%M:%S")}
-"""
-        await self._send_telegram_message(message, urgent=False)
