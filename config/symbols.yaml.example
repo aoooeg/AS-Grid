@@ -7,6 +7,8 @@
 # - initial_quantity: 初始交易数量
 # - leverage: 杠杆倍数（1-125倍）
 # - contract_type: 合约类型（USDC或USDT）
+# - position_threshold_factor: 锁仓阈值系数
+# - position_limit_factor: 持仓阈值系数
 
 symbols:
     
@@ -16,6 +18,8 @@ symbols:
     initial_quantity: 0.05    # 初始数量0.05个
     leverage: 20              # 20倍杠杆
     contract_type: USDC       # USDC合约
+    position_threshold_factor: 20
+    position_limit_factor: 10
     
   # BTC币种配置示例
   - name: BTC
@@ -23,6 +27,8 @@ symbols:
     initial_quantity: 0.001   # 初始数量0.001个
     leverage: 10              # 10倍杠杆
     contract_type: USDT       # USDT合约
+    position_threshold_factor: 20
+    position_limit_factor: 10
     
   # ETH币种配置示例
   - name: ETH
@@ -30,10 +36,14 @@ symbols:
     initial_quantity: 0.01    # 初始数量0.01个
     leverage: 15              # 15倍杠杆
     contract_type: USDT       # USDT合约
+    position_threshold_factor: 20
+    position_limit_factor: 10
     
   # DOGE币种配置示例
   - name: DOGE
     grid_spacing: 0.0001      # 网格间距0.0001
     initial_quantity: 100     # 初始数量100个
     leverage: 30              # 30倍杠杆
-    contract_type: USDC       # USDC合约 
+    contract_type: USDC       # USDC合约
+    position_threshold_factor: 20
+    position_limit_factor: 10 
